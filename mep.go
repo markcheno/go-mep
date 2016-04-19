@@ -30,15 +30,15 @@ type constants []float64
 
 type chromosome struct {
 	// the program - a string of genes
-	prog program
+	Program program
 	// an array of constants
-	consts constants
+	Constants constants
 	// the fitness (or the error)
 	// for regression is computed as sum of abs differences between target and obtained
 	// for classification is computed as the number of incorrectly classified data
-	fitness float64
+	Fitness float64
 	// the index of the best expression in chromosome
-	bestIndex int
+	BestIndex int
 }
 
 type population []chromosome
@@ -49,22 +49,12 @@ func (slice population) Len() int {
 }
 
 func (slice population) Less(i, j int) bool {
-	return slice[i].fitness < slice[j].fitness
+	return slice[i].Fitness < slice[j].Fitness
 }
 
 func (slice population) Swap(i, j int) {
 	slice[i], slice[j] = slice[j], slice[i]
 }
-
-// ProblemType -
-type ProblemType int
-
-const (
-	// REGRESSION -
-	REGRESSION ProblemType = iota
-	// CLASSIFICATION -
-	CLASSIFICATION
-)
 
 // Target -
 type Target []float64
@@ -84,10 +74,9 @@ type Mep struct {
 	ConstantsNum         int
 	ConstantsMin         float64
 	ConstantsMax         float64
-	ProblemType          ProblemType
 	trainingData         TrainingData
 	target               Target
-	pop                  population
+	Pop                  population
 	numVariables         int
 	numTrainingData      int
 	evalMatrix           [][]float64
@@ -95,6 +84,7 @@ type Mep struct {
 
 // New -
 func New(popSize, codeLen int) Mep {
+
 	m := Mep{}
 
 	// mandatory
@@ -102,6 +92,7 @@ func New(popSize, codeLen int) Mep {
 		panic("invalid popSize, must be an even number")
 	}
 	m.PopSize = popSize
+
 	if codeLen < 4 {
 		panic("invalid codeLen, should be >= 4")
 	}
@@ -110,6 +101,8 @@ func New(popSize, codeLen int) Mep {
 	// defaults
 	m.MutationProbability = 0.1
 	m.CrossoverProbability = 0.9
+
+	// TODO force this:
 	// sum of variables_prob + operators_prob + constants_prob MUST BE 1 !
 	m.VariablesProbability = 0.4
 	m.OperatorsProbability = 0.5
@@ -117,13 +110,9 @@ func New(popSize, codeLen int) Mep {
 	m.ConstantsNum = 3
 	m.ConstantsMin = -1
 	m.ConstantsMax = 1
-	m.ProblemType = REGRESSION
 
 	// initialize population
-	m.pop = make(population, m.PopSize)
-	for i := 0; i < m.PopSize; i++ {
-		m.pop[i] = m.newChromosome()
-	}
+	m.Pop = make(population, m.PopSize)
 
 	return m
 }
@@ -163,240 +152,204 @@ func (m *Mep) ReadTrainingData(filename, sep string) error {
 		m.evalMatrix[i] = make([]float64, m.numTrainingData)
 	}
 
+	m.randomPopulation()
+
 	return nil
 }
 
 // StartSteadyState -
 func (m *Mep) StartSteadyState() {
 
-	// a steady state approach:
-	// we work with 1 population
-	// newly created individuals will replace the worst existing ones (only if they are better)
-
-	offspring1 := m.newChromosome()
-	offspring2 := m.newChromosome()
-
-	// initialize
-	for i := 0; i < m.PopSize; i++ {
-		m.pop[i] = m.randomChromosome()
-		if m.ProblemType == REGRESSION {
-			m.fitnessRegression(m.pop[i])
-		} else {
-			m.fitnessClassification(m.pop[i])
-		}
-	}
-
-	// sort ascendingly by fitness
-	sort.Sort(m.pop)
+	offspring1 := m.randomChromosome()
+	offspring2 := m.randomChromosome()
 
 	for k := 0; k < m.PopSize; k += 2 {
 
-		// choose the parents using binary tournament
+		// binary tournament
 		r1 := m.tournamentSelection(2)
 		r2 := m.tournamentSelection(2)
+		m.copyChromosome(&m.Pop[r1], &offspring1)
+		m.copyChromosome(&m.Pop[r2], &offspring2)
 
 		// crossover
-		p := rand.Float64()
-		if p < m.CrossoverProbability {
-			m.oneCutPointCrossover(&m.pop[r1], &m.pop[r2], &offspring1, &offspring2)
-		} else { // no crossover so the offspring are a copy of the parents
-			m.copyIndividual(&offspring1, &m.pop[r1])
-			m.copyIndividual(&offspring2, &m.pop[r2])
+		if rand.Float64() < m.CrossoverProbability {
+			m.oneCutPointCrossover(&m.Pop[r1], &m.Pop[r2], &offspring1, &offspring2)
 		}
 
-		// mutate the result and compute fitness
+		// mutatation
 		m.mutation(&offspring1)
+		m.fitness(&offspring1)
 
-		if m.ProblemType == REGRESSION {
-			m.fitnessRegression(offspring1)
-		} else {
-			m.fitnessClassification(offspring1)
-		}
-		// mutate the other offspring and compute fitness
 		m.mutation(&offspring2)
-		if m.ProblemType == REGRESSION {
-			m.fitnessRegression(offspring2)
-		} else {
-			m.fitnessClassification(offspring2)
-		}
+		m.fitness(&offspring2)
 
 		// replace the worst in the population
-		if offspring1.fitness < m.pop[m.PopSize-1].fitness {
-			m.copyIndividual(&m.pop[m.PopSize-1], &offspring1)
-			sort.Sort(m.pop)
+		if offspring1.Fitness < m.Pop[m.PopSize-1].Fitness {
+			m.copyChromosome(&offspring1, &m.Pop[m.PopSize-1])
 		}
-		if offspring2.fitness < m.pop[m.PopSize-1].fitness {
-			m.copyIndividual(&m.pop[m.PopSize-1], &offspring2)
-			sort.Sort(m.pop)
+		if offspring2.Fitness < m.Pop[m.PopSize-1].Fitness {
+			m.copyChromosome(&offspring2, &m.Pop[m.PopSize-1])
 		}
+
+		sort.Sort(m.Pop)
 	}
 }
 
 // PrintIndividual -
 func (m *Mep) PrintIndividual(popIndex int) {
-
-	fmt.Printf("The chromosome is:\n")
-	fmt.Println("constants =")
-	fmt.Println(m.pop[popIndex].consts)
-
-	for i := 0; i < m.CodeLength; i++ {
-		c := m.pop[popIndex]
-		if c.prog[i].op < 0 {
-			fmt.Printf("%d: %s %d %d\n", i, operators[int(math.Abs(float64(c.prog[i].op)))-1], c.prog[i].adr1, c.prog[i].adr2)
-		} else {
-			if m.pop[popIndex].prog[i].op < m.numVariables {
-				fmt.Printf("%d: inputs[%d]\n", i, m.pop[popIndex].prog[i].op)
-			} else {
-				fmt.Printf("%d: constants[%d]\n", i, m.pop[popIndex].prog[i].op-m.numVariables)
-			}
-		}
-	}
-
-	fmt.Printf("best index = %d\n", m.pop[popIndex].bestIndex)
-	fmt.Printf("fitness = %f\n", m.pop[popIndex].fitness)
+	exp := m.GetExpression("", m.Pop[0], m.Pop[0].BestIndex)
+	fmt.Printf("fitness = %f, exp=%s\n", m.Pop[popIndex].Fitness, exp)
 }
 
-func (m *Mep) newChromosome() chromosome {
-	c := chromosome{}
-	c.prog = make(program, m.CodeLength)
-	if m.ConstantsNum > 0 {
-		c.consts = make(constants, m.ConstantsNum)
+// GetExpression -
+func (m *Mep) GetExpression(exp string, individual chromosome, poz int) string {
+
+	code := individual.Program
+	op := code[poz].op
+	adr1 := code[poz].adr1
+	adr2 := code[poz].adr2
+
+	if op == -1 { // +
+		exp = m.GetExpression(exp, individual, adr1)
+		exp += "+"
+		exp = m.GetExpression(exp, individual, adr2)
+	} else if op == -2 { // -
+		exp = m.GetExpression(exp, individual, adr1)
+		exp += "-"
+		if code[adr2].op == -1 || code[adr2].op == -2 {
+			exp += "("
+		}
+		exp = m.GetExpression(exp, individual, adr2)
+		if code[adr2].op == -1 || code[adr2].op == -2 {
+			exp += ")"
+		}
+	} else if op == -3 { // *
+		if code[adr1].op == -1 || code[adr1].op == -2 {
+			exp += "("
+		}
+		exp = m.GetExpression(exp, individual, adr1)
+		if code[adr1].op == -1 || code[adr1].op == -2 {
+			exp += ")"
+		}
+		exp += "*"
+		if code[adr2].op == -1 || code[adr2].op == -2 {
+			exp += "("
+		}
+		exp = m.GetExpression(exp, individual, adr2)
+		if code[adr2].op == -1 || code[adr2].op == -2 {
+			exp += ")"
+		}
+	} else if op == -4 { // /
+		if code[adr1].op == -1 || code[adr1].op == -2 {
+			exp += "("
+		}
+		exp = m.GetExpression(exp, individual, adr1)
+		if code[adr1].op == -1 || code[adr1].op == -2 {
+			exp += ")"
+		}
+		exp += "/"
+		if code[adr2].op == -1 || code[adr2].op == -2 {
+			exp += "()"
+		}
+		exp = m.GetExpression(exp, individual, adr2)
+		if code[adr2].op == -1 || code[adr2].op == -2 {
+			exp += ")"
+		}
+	} else if op < m.numVariables {
+		exp += fmt.Sprintf("x%d", op)
+	} else {
+		exp += fmt.Sprintf("%f", individual.Constants[op-m.numVariables])
 	}
-	return c
+	return exp
+}
+
+func (m *Mep) randomTerminal() int {
+	var op int
+	prob := rand.Float64() * (m.VariablesProbability + m.ConstantsProbability)
+	if prob <= m.VariablesProbability {
+		op = rand.Intn(m.numVariables)
+	} else {
+		op = m.numVariables + rand.Intn(m.ConstantsNum)
+	}
+	return op
+}
+
+func (m *Mep) randomAdr(index int) int {
+	return rand.Intn(index)
+}
+
+func (m *Mep) randomCode(index int) int {
+	var op int
+	p := rand.Float64()
+	if p <= m.OperatorsProbability {
+		op = -(rand.Intn(len(operators)) + 1) // an operator
+	} else {
+		if p <= m.OperatorsProbability+m.VariablesProbability {
+			op = rand.Intn(m.numVariables) // a variable
+		} else {
+			op = m.numVariables + rand.Intn(m.ConstantsNum) // index of a constant
+		}
+	}
+	return op
+}
+
+func (m *Mep) randomConstant() float64 {
+	return rand.Float64()*(m.ConstantsMax-m.ConstantsMin) + m.ConstantsMin
 }
 
 func (m *Mep) randomChromosome() chromosome {
 
-	a := m.newChromosome()
+	a := chromosome{}
+	a.Program = make(program, m.CodeLength)
+	if m.ConstantsNum > 0 {
+		a.Constants = make(constants, m.ConstantsNum)
+	}
 
 	// generate constants first
 	for c := 0; c < m.ConstantsNum; c++ {
-		a.consts[c] = rand.Float64()*(m.ConstantsMax-m.ConstantsMin) + m.ConstantsMin
-		//TODO check this - a.constants[c] = math.Rand() / double(RAND_MAX) * (params.constantsMax - params.constantsMin) + params.constantsMin
+		a.Constants[c] = m.randomConstant()
 	}
 
 	// on the first position we can have only a variable or a constant
-	sum := m.VariablesProbability + m.ConstantsProbability
-	p := rand.Float64() * sum
-	//TODO check this - double p = rand() / (double)RAND_MAX * sum;
+	a.Program[0].op = m.randomTerminal()
 
-	if p <= m.VariablesProbability {
-		a.prog[0].op = rand.Intn(m.numVariables)
-	} else {
-		a.prog[0].op = m.numVariables + rand.Intn(m.ConstantsNum)
-	}
 	// for all other genes we put either an operator, variable or constant
 	for i := 1; i < m.CodeLength; i++ {
-		p := rand.Float64()
-
-		if p <= m.OperatorsProbability {
-			a.prog[i].op = -(rand.Intn(len(operators))) - 1 // an operator
-		} else {
-			if p <= m.OperatorsProbability+m.VariablesProbability {
-				a.prog[i].op = rand.Intn(m.numVariables) // a variable
-			} else {
-				a.prog[i].op = m.numVariables + rand.Intn(m.ConstantsNum) // index of a constant
-			}
-		}
-		//fmt.Printf("op=%d\n", a.prog[i].op)
-		a.prog[i].adr1 = rand.Int() % i
-		a.prog[i].adr2 = rand.Int() % i
+		a.Program[i].op = m.randomCode(i)
+		a.Program[i].adr1 = m.randomAdr(i)
+		a.Program[i].adr2 = m.randomAdr(i)
 	}
+
+	m.fitness(&a)
+
 	return a
 }
 
-func (m *Mep) fitnessRegression(c chromosome) {
+func (m *Mep) randomPopulation() {
 
-	c.fitness = 1e+308
-	c.bestIndex = -1
+	for i := 0; i < m.PopSize; i++ {
+		m.Pop[i] = m.randomChromosome()
+	}
+
+	// sort by fitness ascending
+	sort.Sort(m.Pop)
+}
+
+func (m *Mep) fitness(c *chromosome) {
+
+	c.Fitness = 1e+308
+	c.BestIndex = -1
 
 	m.computeEvalMatrix(c)
 
-	for i := 0; i < m.CodeLength; i++ { // read the chromosome from top to down
+	for i := 0; i < m.CodeLength; i++ {
 		sumOfErrors := 0.0
 		for k := 0; k < m.numTrainingData; k++ {
 			sumOfErrors += math.Abs(m.evalMatrix[i][k] - m.target[k]) // difference between obtained and expected
 		}
-		if c.fitness > sumOfErrors {
-			c.fitness = sumOfErrors
-			c.bestIndex = i
-		}
-	}
-}
-
-func (m *Mep) fitnessClassification(c chromosome) {
-
-	c.fitness = 1e+308
-	c.bestIndex = -1
-
-	m.computeEvalMatrix(c)
-
-	for i := 0; i < m.CodeLength; i++ { // read the chromosome from top to down
-
-		var countIncorrectClassified float64
-
-		for k := 0; k < m.numTrainingData; k++ {
-			if m.evalMatrix[i][k] < 0 { // the program tells me that this data is in class 0
-				countIncorrectClassified += m.target[k]
-			} else { // the program tells me that this data is in class 1
-				countIncorrectClassified += math.Abs(1 - m.target[k]) // difference between obtained and expected
-			}
-			if c.fitness > countIncorrectClassified {
-				c.fitness = countIncorrectClassified
-				c.bestIndex = i
-			}
-		}
-	}
-}
-
-func (m *Mep) computeEvalMatrix(c chromosome) {
-
-	// we keep intermediate values in a matrix because when an error occurs (like division by 0) we mutate that gene into a variables.
-	// in such case it is faster to have all intermediate results until current gene, so that we don't have to recompute them again.
-
-	var isErrorCase bool // division by zero, other errors
-
-	for i := 0; i < m.CodeLength; i++ { // read the chromosome from top to down
-
-		isErrorCase = false
-		switch c.prog[i].op {
-		case -1: // +
-			for k := 0; k < m.numTrainingData; k++ {
-				m.evalMatrix[i][k] = m.evalMatrix[c.prog[i].adr1][k] + m.evalMatrix[c.prog[i].adr2][k]
-			}
-		case -2: // -
-			for k := 0; k < m.numTrainingData; k++ {
-				m.evalMatrix[i][k] = m.evalMatrix[c.prog[i].adr1][k] - m.evalMatrix[c.prog[i].adr2][k]
-			}
-		case -3: // *
-			for k := 0; k < m.numTrainingData; k++ {
-				m.evalMatrix[i][k] = m.evalMatrix[c.prog[i].adr1][k] * m.evalMatrix[c.prog[i].adr2][k]
-			}
-		case -4: //  /
-			for k := 0; k < m.numTrainingData; k++ {
-				if math.Abs(m.evalMatrix[c.prog[i].adr2][k]) < 1e-6 { // a small constant
-					isErrorCase = true
-				}
-			}
-			if isErrorCase { // an division by zero error occured !!!
-				c.prog[i].op = rand.Intn(m.numVariables) // the gene is mutated into a terminal
-				for k := 0; k < m.numTrainingData; k++ {
-					m.evalMatrix[i][k] = m.trainingData[k][c.prog[i].op]
-				}
-
-			} else { // normal execution....
-				for k := 0; k < m.numTrainingData; k++ {
-					m.evalMatrix[i][k] = m.evalMatrix[c.prog[i].adr1][k] / m.evalMatrix[c.prog[i].adr2][k]
-				}
-			}
-		default: // a variable
-			for k := 0; k < m.numTrainingData; k++ {
-				if c.prog[i].op < m.numVariables {
-					m.evalMatrix[i][k] = m.trainingData[k][c.prog[i].op]
-				} else {
-					m.evalMatrix[i][k] = c.consts[c.prog[i].op-m.numVariables]
-				}
-			}
+		if c.Fitness > sumOfErrors {
+			c.Fitness = sumOfErrors
+			c.BestIndex = i
 		}
 	}
 }
@@ -406,7 +359,7 @@ func (m *Mep) tournamentSelection(tournamentSize int) int {
 	p := rand.Intn(m.PopSize)
 	for i := 1; i < tournamentSize; i++ {
 		r := rand.Intn(m.PopSize)
-		if m.pop[r].fitness < m.pop[p].fitness {
+		if m.Pop[r].Fitness < m.Pop[p].Fitness {
 			p = r
 		}
 	}
@@ -415,118 +368,147 @@ func (m *Mep) tournamentSelection(tournamentSize int) int {
 
 func (m *Mep) oneCutPointCrossover(parent1, parent2, offspring1, offspring2 *chromosome) {
 
-	cuttingPct := rand.Intn(m.CodeLength)
+	cuttingPoint := rand.Intn(m.CodeLength)
+	for i := 0; i < cuttingPoint; i++ {
+		offspring1.Program[i] = parent1.Program[i]
+		offspring2.Program[i] = parent2.Program[i]
+	}
+	for i := cuttingPoint; i < m.CodeLength; i++ {
+		offspring1.Program[i] = parent2.Program[i]
+		offspring2.Program[i] = parent1.Program[i]
+	}
 
-	for i := 0; i < cuttingPct; i++ {
-		offspring1.prog[i] = parent1.prog[i]
-		offspring2.prog[i] = parent2.prog[i]
-	}
-	for i := cuttingPct; i < m.CodeLength; i++ {
-		offspring1.prog[i] = parent2.prog[i]
-		offspring2.prog[i] = parent1.prog[i]
-	}
 	// now the constants
 	if m.ConstantsNum > 0 {
-		cuttingPct = rand.Intn(m.ConstantsNum)
-		for i := 0; i < cuttingPct; i++ {
-			offspring1.consts[i] = parent1.consts[i]
-			offspring2.consts[i] = parent2.consts[i]
+		cuttingPoint = rand.Intn(m.ConstantsNum)
+		for i := 0; i < cuttingPoint; i++ {
+			offspring1.Constants[i] = parent1.Constants[i]
+			offspring2.Constants[i] = parent2.Constants[i]
 		}
-		for i := cuttingPct; i < m.ConstantsNum; i++ {
-			offspring1.consts[i] = parent2.consts[i]
-			offspring2.consts[i] = parent1.consts[i]
+		for i := cuttingPoint; i < m.ConstantsNum; i++ {
+			offspring1.Constants[i] = parent1.Constants[i]
+			offspring2.Constants[i] = parent2.Constants[i]
 		}
 	}
 }
 
 func (m *Mep) uniformCrossover(parent1, parent2, offspring1, offspring2 *chromosome) {
+
 	// code
 	for i := 0; i < m.CodeLength; i++ {
-		if (rand.Int() % 2) == 0 {
-			offspring1.prog[i] = parent1.prog[i]
-			offspring2.prog[i] = parent2.prog[i]
+		if rand.Float64() < 0.5 {
+			offspring1.Program[i] = parent1.Program[i]
+			offspring2.Program[i] = parent2.Program[i]
 		} else {
-			offspring1.prog[i] = parent2.prog[i]
-			offspring2.prog[i] = parent1.prog[i]
+			offspring1.Program[i] = parent2.Program[i]
+			offspring2.Program[i] = parent1.Program[i]
 		}
 	}
 
 	// constants
 	for i := 0; i < m.ConstantsNum; i++ {
 		if (rand.Int() % 2) == 0 {
-			offspring1.consts[i] = parent1.consts[i]
-			offspring2.consts[i] = parent2.consts[i]
+			offspring1.Constants[i] = parent1.Constants[i]
+			offspring2.Constants[i] = parent2.Constants[i]
 		} else {
-			offspring1.consts[i] = parent2.consts[i]
-			offspring2.consts[i] = parent1.consts[i]
+			offspring1.Constants[i] = parent2.Constants[i]
+			offspring2.Constants[i] = parent1.Constants[i]
 		}
 	}
-}
-
-func (m *Mep) copyIndividual(source, dest *chromosome) {
-
-	for i := 0; i < m.CodeLength; i++ {
-		dest.prog[i] = source.prog[i]
-	}
-
-	for i := 0; i < m.ConstantsNum; i++ {
-		dest.consts[i] = source.consts[i]
-	}
-	dest.fitness = source.fitness
-	dest.bestIndex = source.bestIndex
 }
 
 func (m *Mep) mutation(aChromosome *chromosome) {
 
 	// mutate each symbol with the given probability
 	// first gene must be a variable or constant
-	p := rand.Float64()
-	if p < m.MutationProbability {
-		sum := m.VariablesProbability + m.ConstantsProbability
-		p = rand.Float64() * sum
-
-		if p <= m.VariablesProbability {
-			aChromosome.prog[0].op = rand.Intn(m.numVariables)
-		} else {
-			aChromosome.prog[0].op = m.numVariables + rand.Intn(m.ConstantsNum)
-		}
+	if rand.Float64() < m.MutationProbability {
+		aChromosome.Program[0].op = m.randomTerminal()
 	}
-	// other genes
+
 	for i := 1; i < m.CodeLength; i++ {
-		p = rand.Float64() // mutate the operator
-		if p < m.MutationProbability {
 
-			// we mutate it, but we have to decide what we put here
-			p = rand.Float64()
-
-			if p <= m.OperatorsProbability {
-				aChromosome.prog[i].op = -rand.Intn(len(operators)) - 1
-			} else {
-				if p <= m.OperatorsProbability+m.VariablesProbability {
-					aChromosome.prog[i].op = rand.Intn(m.numVariables)
-				} else {
-					aChromosome.prog[i].op = m.numVariables + rand.Intn(m.ConstantsNum) // index of a constant
-				}
-			}
+		if rand.Float64() < m.MutationProbability {
+			aChromosome.Program[i].op = m.randomCode(i)
 		}
 
-		p = rand.Float64() // mutate the first address  (adr1)
-		if p < m.MutationProbability {
-			aChromosome.prog[i].adr1 = rand.Intn(i)
+		if rand.Float64() < m.MutationProbability {
+			aChromosome.Program[i].adr1 = m.randomAdr(i)
 		}
 
-		p = rand.Float64() // mutate the second address   (adr2)
-		if p < m.MutationProbability {
-			aChromosome.prog[i].adr2 = rand.Intn(i)
+		if rand.Float64() < m.MutationProbability {
+			aChromosome.Program[i].adr2 = m.randomAdr(i)
 		}
 	}
 
 	// mutate the constants
 	for c := 0; c < m.ConstantsNum; c++ {
-		p = rand.Float64()
-		if p < m.MutationProbability {
-			aChromosome.consts[c] = rand.Float64()*(m.ConstantsMax-m.ConstantsMin) + m.ConstantsMin
+		if rand.Float64() < m.MutationProbability {
+			aChromosome.Constants[c] = m.randomConstant()
 		}
 	}
+}
 
+func (m *Mep) computeEvalMatrix(c *chromosome) {
+
+	// we keep intermediate values in a matrix because when an error occurs (like division by 0) we mutate that gene into a variables.
+	// in such case it is faster to have all intermediate results until current gene, so that we don't have to recompute them again.
+
+	var isErrorCase bool // division by zero, other errors
+
+	for i := 0; i < m.CodeLength; i++ { // read the chromosome from top to down
+
+		isErrorCase = false
+		switch c.Program[i].op {
+		case -1: // +
+			for k := 0; k < m.numTrainingData; k++ {
+				m.evalMatrix[i][k] = m.evalMatrix[c.Program[i].adr1][k] + m.evalMatrix[c.Program[i].adr2][k]
+			}
+		case -2: // -
+			for k := 0; k < m.numTrainingData; k++ {
+				m.evalMatrix[i][k] = m.evalMatrix[c.Program[i].adr1][k] - m.evalMatrix[c.Program[i].adr2][k]
+			}
+		case -3: // *
+			for k := 0; k < m.numTrainingData; k++ {
+				m.evalMatrix[i][k] = m.evalMatrix[c.Program[i].adr1][k] * m.evalMatrix[c.Program[i].adr2][k]
+			}
+		case -4: //  /
+			for k := 0; k < m.numTrainingData; k++ {
+				if math.Abs(m.evalMatrix[c.Program[i].adr2][k]) < 1e-6 { // a small constant
+					isErrorCase = true
+				}
+			}
+			if isErrorCase { // an division by zero error occured !!!
+				c.Program[i].op = rand.Intn(m.numVariables) // the gene is mutated into a terminal
+				for k := 0; k < m.numTrainingData; k++ {
+					m.evalMatrix[i][k] = m.trainingData[k][c.Program[i].op]
+				}
+
+			} else { // normal execution....
+				for k := 0; k < m.numTrainingData; k++ {
+					m.evalMatrix[i][k] = m.evalMatrix[c.Program[i].adr1][k] / m.evalMatrix[c.Program[i].adr2][k]
+				}
+			}
+		default: // a variable
+			for k := 0; k < m.numTrainingData; k++ {
+				if c.Program[i].op < m.numVariables {
+					m.evalMatrix[i][k] = m.trainingData[k][c.Program[i].op]
+				} else {
+					m.evalMatrix[i][k] = c.Constants[c.Program[i].op-m.numVariables]
+				}
+			}
+		}
+	}
+}
+
+func (m *Mep) copyChromosome(source, dest *chromosome) {
+
+	for i := 0; i < m.CodeLength; i++ {
+		dest.Program[i] = source.Program[i]
+	}
+
+	for i := 0; i < m.ConstantsNum; i++ {
+		dest.Constants[i] = source.Constants[i]
+	}
+	dest.Fitness = source.Fitness
+	dest.BestIndex = source.BestIndex
 }

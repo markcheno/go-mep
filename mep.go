@@ -124,7 +124,7 @@ type Mep struct {
 	popSize                  int
 	codeLength               int
 	td                       TrainingData
-	fitness                  FitnessFunction
+	ff                       FitnessFunction
 	variablesProbability     float64
 	operatorsProbability     float64
 	randConstantsProbability float64
@@ -139,18 +139,17 @@ type Mep struct {
 }
 
 // New -
-func New(td TrainingData, fitness FitnessFunction, popSize, codeLen int) Mep {
+func New(td TrainingData, ff FitnessFunction, popSize, codeLen int) Mep {
 
 	m := Mep{}
-
+	m.ff = ff
 	m.td = td
+
 	m.numTraining = len(m.td.Train)
 	m.numVariables = len(m.td.Train[0])
 	if m.numTraining == 0 || m.numVariables == 0 {
 		panic("Invalid data")
 	}
-
-	m.fitness = fitness
 
 	m.popSize = popSize
 	m.codeLength = codeLen
@@ -280,13 +279,22 @@ func (m *Mep) BestFitness() float64 {
 	return m.pop[0].fitness
 }
 
-// PrintPop -
-func (m *Mep) PrintPop(index int) {
-	exp := m.parse("", m.pop[index], m.pop[index].bestIndex)
-	fmt.Printf("fitness = %f, expr=%s\n", m.pop[index].fitness, exp)
+// BestExpr -
+func (m *Mep) BestExpr() string {
+	return m.parse("", m.pop[0], m.pop[0].bestIndex)
 }
 
-// parse -
+// Best -
+func (m *Mep) Best() (float64, string) {
+	return m.pop[0].fitness, m.parse("", m.pop[0], m.pop[0].bestIndex)
+}
+
+// PrintBest -
+func (m *Mep) PrintBest() {
+	exp := m.parse("", m.pop[0], m.pop[0].bestIndex)
+	fmt.Printf("fitness = %f, expr=%s\n", m.pop[0].fitness, exp)
+}
+
 func (m *Mep) parse(exp string, individual chromosome, poz int) string {
 
 	code := individual.program
@@ -537,7 +545,7 @@ func (m *Mep) eval(c *chromosome) {
 			}
 		}
 
-		fitness := m.fitness(m.results[i], m.td.Target)
+		fitness := m.ff(m.results[i], m.td.Target)
 		if c.fitness > fitness {
 			c.fitness = fitness
 			c.bestIndex = i

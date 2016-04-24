@@ -23,7 +23,7 @@ func main() {
 	gens := 0
 	for gens < 1000 {
 		m.Search()
-		m.PrintPop(0)
+		m.PrintBest()
 		gens++
 		if m.BestFitness() < 0.01 {
 			break
@@ -32,6 +32,6 @@ func main() {
 	elapsed := time.Since(start)
 	fmt.Printf("Elapsed time: %s\n", elapsed)
 	fmt.Printf("solution found in %d runs\n", gens)
-	m.PrintPop(0)
+	m.PrintBest()
 
 }

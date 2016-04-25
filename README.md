@@ -4,3 +4,9 @@ A pure [Go](http://golang.org/) implementation of the Multi Expression Programmi
 
 Alpha version, under heavy development.
 
+TO DO:
+
+- Comprehensive tests
+- Main program
+- Finish test functions
+

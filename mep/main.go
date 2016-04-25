@@ -11,27 +11,18 @@ func main() {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	//testData := mep.NewAckley(50, 5)
+	//testData := mep.ReadTrainingData("testdata/simple2.txt", true, " ")
 	testData := mep.NewPi(50, 1)
-	//testData := mep.ReadTrainingData("testdata/simple.txt", true, " ")
-	m := mep.New(testData, mep.TotalErrorFF, 100, 50)
+	m := mep.New(testData, mep.TotalErrorFF)
+	//m.SetProb(0.2, 0.8)
+	//m.SetOper("div", false)
 	m.SetOper("cos", true)
-	m.SetConst(5, -1, 1)
-	//m.SetOper("exp", true)
-	start := time.Now()
+	m.SetConst(10, -1, 1)
+	//m.SetPop(100, 20)
 
-	gens := 0
-	for gens < 1000 {
-		m.Search()
-		m.PrintBest()
-		gens++
-		if m.BestFitness() < 0.01 {
-			break
-		}
-	}
-	elapsed := time.Since(start)
+	gens, elapsed := m.Solve(1000, 0.001, false)
+
 	fmt.Printf("Elapsed time: %s\n", elapsed)
-	fmt.Printf("solution found in %d runs\n", gens)
+	fmt.Printf("Solution found in %d generations:\n", gens)
 	m.PrintBest()
-
 }

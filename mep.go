@@ -118,7 +118,7 @@ type operator struct {
 	enabled bool
 }
 
-// CrossoverType -
+// CrossoverType - uniform or onecutpoint
 type CrossoverType int
 
 const (
@@ -128,7 +128,7 @@ const (
 	Uniform
 )
 
-// Mep -
+// Mep - primary class
 type Mep struct {
 	mutationProbability      float64
 	crossoverProbability     float64

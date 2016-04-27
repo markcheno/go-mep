@@ -39,7 +39,7 @@ type TrainingData struct {
 	Labels []string
 }
 
-// ReadTrainingData -
+// ReadTrainingData - read trainging data from a file
 func ReadTrainingData(filename string, header bool, sep string) TrainingData {
 
 	td := TrainingData{}
@@ -190,14 +190,7 @@ func New(td TrainingData, ff FitnessFunction) Mep {
 	m.randConstantsProbability = 0
 	m.crossoverType = OneCutPoint
 
-	// pre-allocate results matrix
-	m.results = make([][]float64, m.codeLength)
-	for i := 0; i < m.codeLength; i++ {
-		m.results[i] = make([]float64, m.numTraining)
-	}
-
 	// initialize population
-	m.pop = make(population, m.popSize)
 	m.randomPopulation()
 
 	return m
@@ -215,20 +208,27 @@ func (m *Mep) SetPop(popSize, codeLength int) {
 	m.popSize = popSize
 	m.codeLength = codeLength
 	// initialize population
-	m.pop = make(population, m.popSize)
 	m.randomPopulation()
 }
 
 // SetConst - set number and range of random constants (resets population)
 func (m *Mep) SetConst(num int, min, max float64) {
-	m.numRandConstants = num
-	m.randConstantsMax = max
-	m.randConstantsMin = min
-	m.variablesProbability = 0.5
-	m.operatorsProbability = 0.4
-	m.randConstantsProbability = 1 - m.variablesProbability - m.operatorsProbability
+	if num > 0 {
+		m.numRandConstants = num
+		m.randConstantsMax = max
+		m.randConstantsMin = min
+		m.variablesProbability = 0.5
+		m.operatorsProbability = 0.4
+		m.randConstantsProbability = 1 - m.variablesProbability - m.operatorsProbability
+	} else {
+		m.numRandConstants = 0
+		m.randConstantsMax = 0
+		m.randConstantsMin = 0
+		m.variablesProbability = 0.5
+		m.operatorsProbability = 0.5
+		m.randConstantsProbability = 0.0
+	}
 	// initialize population
-	m.pop = make(population, m.popSize)
 	m.randomPopulation()
 }
 
@@ -245,8 +245,8 @@ func (m *Mep) SetOper(operName string, state bool) {
 	}
 }
 
-// GetOper - get list of enabled operators
-func (m *Mep) GetOper() []string {
+// Oper - list of enabled operators
+func (m *Mep) Oper() []string {
 	var operators []string
 	for index := 0; index < len(m.operators); index++ {
 		if m.operators[index].enabled {
@@ -274,12 +274,12 @@ func (m *Mep) SetMutation(mutationProbability float64) {
 }
 
 // SetProb - set mutation/crossover probability (valid range 0.0 - 1.0)
-func (m *Mep) SetProb(mutation, crossover float64) {
-	m.mutationProbability = mutation
+func (m *Mep) SetProb(mutationProbability, crossoverProbability float64) {
+	m.mutationProbability = mutationProbability
 	if m.mutationProbability < 0.0 || m.mutationProbability > 1.0 {
 		panic("invalid mutationProbability")
 	}
-	m.crossoverProbability = crossover
+	m.crossoverProbability = crossoverProbability
 	if m.crossoverProbability < 0.0 || m.crossoverProbability > 1.0 {
 		panic("invalid crossoverProbability")
 	}
@@ -620,6 +620,14 @@ func (m *Mep) randomChromosome() chromosome {
 
 func (m *Mep) randomPopulation() {
 
+	// allocate results matrix
+	m.results = make([][]float64, m.codeLength)
+	for i := 0; i < m.codeLength; i++ {
+		m.results[i] = make([]float64, m.numTraining)
+	}
+
+	// create a new random population
+	m.pop = make(population, m.popSize)
 	for i := 0; i < m.popSize; i++ {
 		m.pop[i] = m.randomChromosome()
 	}

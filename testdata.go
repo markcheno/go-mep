@@ -6,331 +6,237 @@ import (
 	"math/rand"
 )
 
-// NewQuarticPoly -
-func NewQuarticPoly(npoints int) TrainingData {
+type testData struct {
+	xmin float64
+	xmax float64
+	eval func(terms []float64) float64
+}
 
-	labels := []string{"x"}
-	training := make([][]float64, npoints)
-	target := make([]float64, npoints)
-
-	for i := 0; i < npoints; i++ {
-		x := rand.Float64()
-		if rand.Float64() < 0.5 {
-			x = x * -1
-		}
-		result := math.Pow(x, 4) + math.Pow(x, 3) + math.Pow(x, 2) + x
-		training[i] = []float64{x}
-		target[i] = result
+func (t *testData) generate(numTraining, numVariables int) TrainingData {
+	td := TrainingData{}
+	td.Labels = make([]string, numVariables)
+	for i := 0; i < numVariables; i++ {
+		td.Labels[i] = fmt.Sprintf("x%d", i)
 	}
-
-	return TrainingData{training, target, labels}
+	td.Train = make([][]float64, numTraining)
+	td.Target = make([]float64, numTraining)
+	for i := 0; i < numTraining; i++ {
+		td.Train[i] = make([]float64, numVariables)
+		for j := 0; j < numVariables; j++ {
+			td.Train[i][j] = rand.Float64()*(t.xmax-t.xmin) + t.xmin
+		}
+		td.Target[i] = t.eval(td.Train[i])
+	}
+	return td
 }
 
 // NewAckley -
 func NewAckley(numTraining, numVariables int) TrainingData {
-
-	t := TrainingData{}
-	const xmin = -32.0
-	const xmax = 32.0
-	t.Labels = make([]string, numVariables)
-	t.Train = make([][]float64, numTraining)
-	t.Target = make([]float64, numTraining)
-	for i := 0; i < numVariables; i++ {
-		t.Labels[i] = fmt.Sprintf("x%d", i)
+	testdata := testData{
+		xmin: -32,
+		xmax: 32,
+		eval: func(terms []float64) float64 {
+			n := float64(len(terms))
+			a := 20.0
+			b := 0.2
+			c := 2.0 * math.Pi
+			s1 := 0.0
+			s2 := 0.0
+			for i := 0; i < len(terms); i++ {
+				s1 = math.Pow(s1+terms[i], 2)
+				s2 = s2 + math.Cos(c*terms[i])
+			}
+			return -a*math.Exp(-b*math.Sqrt(1.0/n*s1)) - math.Exp(1.0/n*s2) + a + math.Exp(1.0)
+		},
 	}
+	return testdata.generate(numTraining, numVariables)
+}
 
-	for i := 0; i < numTraining; i++ {
-		t.Train[i] = make([]float64, numVariables)
-		for j := 0; j < numVariables; j++ {
-			t.Train[i][j] = rand.Float64()*(xmax-xmin) + xmin
-		}
-		const a = 20.0
-		const b = 0.2
-		const c = 2.0 * math.Pi
-		s1 := 0.0
-		s2 := 0.0
-		for j := 0; j < numVariables; j++ {
-			s1 = math.Pow(s1+t.Train[i][j], 2)
-			s2 = s2 + math.Cos(c*t.Train[i][j])
-		}
-		t.Target[i] = -a*math.Exp(-b*math.Sqrt(1.0/float64(numTraining)*s1)) - math.Exp(1.0/float64(numTraining)*s2) + a + math.Exp(1.0)
+// NewRosenbrock -
+func NewRosenbrock(numTraining, numVariables int) TrainingData {
+	testdata := testData{
+		xmin: -32,
+		xmax: 32,
+		eval: func(terms []float64) float64 {
+			sum := 0.0
+			for i := 0; i < len(terms)-1; i++ {
+				sum = sum + 100*math.Pow((math.Pow(terms[i], 2)-terms[i+1]), 2) + math.Pow(terms[i]-1, 2)
+			}
+			return sum
+		},
 	}
-
-	return t
+	return testdata.generate(numTraining, numVariables)
 }
 
-// NewPi -
-func NewPi(numTraining, numVariables int) TrainingData {
-	t := TrainingData{}
-	const xmin = 1.0
-	const xmax = 100.0
-	t.Labels = make([]string, numVariables)
-	t.Train = make([][]float64, numTraining)
-	t.Target = make([]float64, numTraining)
-	for i := 0; i < numVariables; i++ {
-		t.Labels[i] = fmt.Sprintf("x%d", i)
+// NewPiTest -
+func NewPiTest(numTraining, numVariables int) TrainingData {
+	testdata := testData{
+		xmin: 0,
+		xmax: 0,
+		eval: func(terms []float64) float64 {
+			return math.Pi
+		},
 	}
+	return testdata.generate(numTraining, numVariables)
+}
 
-	for i := 0; i < numTraining; i++ {
-		t.Train[i] = make([]float64, numVariables)
-		for j := 0; j < numVariables; j++ {
-			t.Train[i][j] = rand.Float64()*(xmax-xmin) + xmin
-		}
-		t.Target[i] = math.Pi
+// NewRastigrinF1 -
+func NewRastigrinF1(numTraining, numVariables int) TrainingData {
+	testdata := testData{
+		xmin: -5.12,
+		xmax: 5.12,
+		eval: func(terms []float64) float64 {
+			n := float64(len(terms))
+			s := 0.0
+			for i := 0; i < len(terms); i++ {
+				s = s + (math.Pow(terms[i], 2) - 10*math.Cos(2*math.Pi*terms[i]))
+			}
+			return 10*n + s
+		},
 	}
-
-	return t
+	return testdata.generate(numTraining, numVariables)
 }
 
-// NewRastrigin -
-func NewRastrigin(numTraining, numVariables int) TrainingData {
-
-	t := TrainingData{}
-	const xmin = -5.0
-	const xmax = 5.0
-	t.Labels = make([]string, numVariables)
-	t.Train = make([][]float64, numTraining)
-	t.Target = make([]float64, numTraining)
-	for i := 0; i < numVariables; i++ {
-		t.Labels[i] = fmt.Sprintf("x%d", i)
+// NewQuarticPoly -
+func NewQuarticPoly(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -1,
+		xmax: 1,
+		eval: func(terms []float64) float64 {
+			return math.Pow(terms[0], 4) + math.Pow(terms[0], 3) + math.Pow(terms[0], 2) + terms[0]
+		},
 	}
+	return testdata.generate(numTraining, 1)
+}
 
-	n := float64(numTraining)
-	s := 0.0
-	for i := 0; i < numTraining; i++ {
-		t.Train[i] = make([]float64, numVariables)
-		for j := 0; j < numVariables; j++ {
-			t.Train[i][j] = rand.Float64()*(xmax-xmin) + xmin
-			s = s + (math.Pow(t.Train[i][j], 2) - 10*math.Cos(2*math.Pi*t.Train[i][j]))
-			s = 10*n + s
-			t.Target[i] = s
-		}
+// NewPythagorean -
+func NewPythagorean(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: 5,
+		xmax: 50,
+		eval: func(terms []float64) float64 {
+			return math.Sqrt((terms[0] * terms[0]) + (terms[1] * terms[1]))
+		},
 	}
-	return t
+	return testdata.generate(numTraining, 2)
 }
 
-/*
-func (t *Test)  TestFunction(int num_training_data, int num_variables, float xmin, float xmax) {
-    t.xmin = xmin;
-    t.xmax = xmax;
-    labels = new String[num_variables];
-    for (int i=0; i<num_variables; i++ ) {
-      labels[i] = new String("x"+i);
-    }
-    train = new float[num_training_data][num_variables];
-    target = new float[num_training_data];
-    for (int i=0; i<num_training_data; i++ ) {
-      for (int j=0; j<num_variables; j++ ) {
-        //train[i][j] = random(xmin,xmax);
-        train[i][j] = rnd.nextFloat()*(xmax-xmin)+xmin;
-      }
-      target[i] = evaluate(train[i]);
-    }
-  }
+// NewDejongF1 -
+func NewDejongF1(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -5.12,
+		xmax: 5.12,
+		eval: func(terms []float64) float64 {
+			return math.Pow(terms[0], 2) + math.Pow(terms[1], 2)
+		},
+	}
+	return testdata.generate(numTraining, 2)
 }
 
-abstract class TestFunction extends TrainingData {
-  float xmin = 0.0f;
-  float xmax = 0.0f;
-
-
-  abstract String name();
-  abstract float evaluate(float[] terms);
+// NewSchwefel -
+func NewSchwefel(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -1,
+		xmax: 1,
+		eval: func(terms []float64) float64 {
+			return -terms[0]*math.Sin(math.Sqrt(math.Abs(terms[0]))) - terms[1]*math.Sin(math.Sqrt(math.Abs(terms[1])))
+		},
+	}
+	return testdata.generate(numTraining, 2)
 }
 
-class Ackley extends TestFunction {
-  Ackley() {
-    super(50, 5, -32.0f, 32.0f);
-  }
-  Ackley(int num_training_data, int num_variables) {
-    super(num_training_data, num_variables, -32.0f, 32.0f);
-  }
-  float evaluate(float[] x) {
-    float n = x.length;
-    float a = 20.0f;
-    float b = 0.2f;
-    float c = 2f*(float)Math.PI;
-    float s1 = 0.0f;
-    float s2 = 0.0f;
-    for (int i=0; i<x.length; i++) {
-      s1 = (float)Math.pow(s1+x[i], 2 );
-      s2 = s2+(float)Math.cos(c*x[i]);
-    }
-    return -a*(float)Math.exp(-b*(float)Math.sqrt(1/n*s1))-(float)Math.exp(1/n*s2)+a+(float)Math.exp(1.0);
-  }
-  String name() {
-    return "Ackley";
-  }
+// NewSequenceInduction -
+func NewSequenceInduction(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: 5,
+		xmax: 50,
+		eval: func(terms []float64) float64 {
+			return ((5.0 * math.Pow(terms[0], 4)) + (4.0 * math.Pow(terms[0], 3)) + (3.0 * math.Pow(terms[0], 2)) + (2.0 * terms[0]) + 1.0)
+		},
+	}
+	return testdata.generate(numTraining, 1)
 }
 
-class Rosenbrock extends TestFunction {
-  Rosenbrock() {
-    super(50, 5, -30.0f, 30.0f);
-  }
-  Rosenbrock(int num_training_data, int num_variables) {
-    super(num_training_data, num_variables, -30.0f, 30.0f);
-  }
-  float evaluate(float[] x) {
-    float n = x.length;
-    float sum = 0f;
-    for (int i=0; i<x.length-1; i++) {
-      sum = sum + 100 * (float)Math.pow(((float)Math.pow(x[i], 2) - x[i+1]), 2) + (float)Math.pow(x[i]-1, 2);
-    }
-    return sum;
-  }
-  String name() {
-    return "Rosenbrock";
-  }
+// NewDropwave -
+func NewDropwave(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -5.12,
+		xmax: 5.12,
+		eval: func(terms []float64) float64 {
+			return -(1.0 + math.Cos(12*math.Sqrt(terms[0]*terms[0]+terms[1]*terms[1]))) / (0.5*(terms[0]*terms[0]+terms[1]*terms[1]) + 2)
+		},
+	}
+	return testdata.generate(numTraining, 2)
 }
 
-class Rastrigin extends TestFunction {
-  Rastrigin() {
-    super(50, 5, -5.0f, 5.0f);
-  }
-  Rastrigin(int num_training_data, int num_variables) {
-    super(num_training_data, num_variables, -5.0f, 5.0f);
-  }
-  float evaluate(float[] x) {
-    float n = x.length;
-    float s = 0f;
-    for (int i=0; i<x.length; i++) {
-      s = s + ( (float)Math.pow(x[i], 2) - 10 * (float)Math.cos( 2*Math.PI*x[i]));
-    }
-    return 10*n+s;
-  }
-  String name() {
-    return "Rastrigin";
-  }
+// NewMichalewicz -
+func NewMichalewicz(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -5.12,
+		xmax: 5.12,
+		eval: func(terms []float64) float64 {
+			return -math.Sin(terms[0])*math.Pow(math.Sin(terms[0]*terms[0]/math.Pi), 2) - math.Sin(terms[1])*math.Pow(math.Sin(terms[1]*terms[1]/math.Pi), 2)
+		},
+	}
+	return testdata.generate(numTraining, 2)
 }
 
-class Schwefel extends TestFunction {
-  Schwefel() {
-    super(50, 5, -500.0f, 500.0f);
-  }
-  Schwefel(int num_training_data, int num_variables) {
-    super(num_training_data, num_variables, -500.0f, 500.0f);
-  }
-  float evaluate(float[] x) {
-    float n = x.length;
-    float sum = 0f;
-    for (int i=0; i<x.length; i++) {
-      sum = sum - x[i]*(float)Math.sin((float)Math.sqrt((float)Math.abs(x[i])));
-    }
-    return 418.9829f * n + sum;
-  }
-  String name() {
-    return "Schwefel";
-  }
+// NewSchafferF6 -
+func NewSchafferF6(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -5.12,
+		xmax: 5.12,
+		eval: func(terms []float64) float64 {
+			return 0.5 + (math.Pow(math.Sin(math.Sqrt(terms[0]*terms[0]+terms[1]*terms[1])), 2)-0.5)/math.Pow(1+0.001*(terms[0]*terms[0]+terms[1]*terms[1]), 2)
+		},
+	}
+	return testdata.generate(numTraining, 2)
 }
 
-class Pythagorean extends TestFunction {
-  Pythagorean() {
-    super(20, 2, 5.0f, 50.0f);
-  }
-  Pythagorean(int num_training_data) {
-    super(num_training_data, 2, 5.0f, 50.0f);
-  }
-  float evaluate(float[] x) {
-    return (float)Math.sqrt( (x[0]*x[0]) + (x[1]*x[1]) );
-  }
-  String name() {
-    return "Pythagorean";
-  }
+// NewSixHump -
+func NewSixHump(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -1,
+		xmax: 1,
+		eval: func(terms []float64) float64 {
+			return (4.0-2.1*terms[0]*terms[0]+math.Pow(terms[0], 4)/3)*terms[0]*terms[0] + terms[0]*terms[1] + (-4+4*terms[1]*terms[1])*terms[1]*terms[1]
+		},
+	}
+	return testdata.generate(numTraining, 2)
 }
 
-class SymbolicRegressionTD extends TestFunction {
-  SymbolicRegressionTD() {
-    super(50, 1, 5.0f, 50.0f);
-  }
-  SymbolicRegressionTD(int num_training_data) {
-    super(num_training_data, 1, 5.0f, 50.0f);
-  }
-  float evaluate(float[] x) {
-    return (float)(Math.pow(x[0], 4)+Math.pow(x[0], 3)+Math.pow(x[0], 2)+x[0]);
-  }
-  String name() {
-    return "SymbolicRegression";
-  }
+// NewSimpleConstantRegression1 -
+func NewSimpleConstantRegression1(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: 1,
+		xmax: 20,
+		eval: func(terms []float64) float64 {
+			return (math.Pow(terms[0], 3) - 0.3*math.Pow(terms[0], 2) - 0.4*terms[0] - 0.6)
+		},
+	}
+	return testdata.generate(numTraining, 1)
 }
 
-class SequenceInduction extends TestFunction {
-  SequenceInduction() {
-    super(50, 1, 5.0f, 50.0f);
-  }
-  SequenceInduction(int num_training_data) {
-    super(num_training_data, 1, 5.0f, 50.0f);
-  }
-  float evaluate(float[] x) {
-    return (float)((5.0*Math.pow(x[0], 4)) + (4.0*Math.pow(x[0], 3)) + (3.0*Math.pow(x[0], 2)) + (2.0*x[0]) + 1.0);
-  }
-  String name() {
-    return "SequenceInduction";
-  }
+// NewSimpleConstantRegression2 -
+func NewSimpleConstantRegression2(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: 1,
+		xmax: 20,
+		eval: func(terms []float64) float64 {
+			return terms[0]*terms[0] + math.Pi
+		},
+	}
+	return testdata.generate(numTraining, 1)
 }
 
-class SimpleConstantRegression1 extends TestFunction {
-  SimpleConstantRegression1() {
-    super(100, 1, 1.0f, 20.0f);
-  }
-  SimpleConstantRegression1(int num_training_data) {
-    super(num_training_data, 1, 1.0f, 20.0f);
-  }
-  float evaluate(float[] x) {
-    return (float)(Math.pow(x[0],3)-0.3*Math.pow(x[0],2)-0.4*x[0]-0.6);
-  }
-  String name() {
-    return "SimpleConstantRegression1";
-  }
+// NewSimpleConstantRegression3 -
+func NewSimpleConstantRegression3(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: 1,
+		xmax: 20,
+		eval: func(terms []float64) float64 {
+			return (math.E * terms[0] * terms[0]) + (math.Pi * terms[0])
+		},
+	}
+	return testdata.generate(numTraining, 1)
 }
-
-class SimpleConstantRegression2 extends TestFunction {
-  SimpleConstantRegression2() {
-    super(50, 1, 1.0f, 20.0f);
-  }
-  SimpleConstantRegression2(int num_training_data) {
-    super(num_training_data, 1, 1.0f, 20.0f);
-  }
-  float evaluate(float[] x) {
-    return (float)(x[0]*x[0]+Math.PI);
-  }
-  String name() {
-    return "SimpleConstantRegression2";
-  }
-}
-
-class SimpleConstantRegression3 extends TestFunction {
-  SimpleConstantRegression3() {
-    super(25, 1, 1.0f, 20.0f);
-  }
-  SimpleConstantRegression3(int num_training_data) {
-    super(num_training_data, 1, 1.0f, 100.0f);
-  }
-  float evaluate(float[] x) {
-    return (float)((Math.E*x[0]*x[0])+(Math.PI*x[0]));
-  }
-  String name() {
-    return "SimpleConstantRegression3";
-  }
-}
-
-class PiTest extends TestFunction {
-  PiTest() {
-    super(50, 1, 1.0f, 100.0f);
-  }
-  PiTest(int num_training_data) {
-    super(num_training_data, 1, 1.0f, 100.0f);
-  }
-  float evaluate(float[] x) {
-    return (float)Math.PI;
-  }
-  String name() {
-    return "PiTest";
-  }
-}
-*/
-
-// TODO: integer constant test: y = 4*pow(x,4)+3*pow(x,3)+2*pow(x,2)+x
-
-// TODO: real constant test: y = 4.251*pow(x,2)+log(x*x)+7.243*pow(e,x)
-
-// TODO: real constant test: 2.718*x*x + 3.1416*x

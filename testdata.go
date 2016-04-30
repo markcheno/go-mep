@@ -69,7 +69,7 @@ func NewRosenbrock(numTraining, numVariables int) TrainingData {
 }
 
 // NewPiTest -
-func NewPiTest(numTraining, numVariables int) TrainingData {
+func NewPiTest(numTraining int) TrainingData {
 	testdata := testData{
 		xmin: 0,
 		xmax: 0,
@@ -77,7 +77,7 @@ func NewPiTest(numTraining, numVariables int) TrainingData {
 			return math.Pi
 		},
 	}
-	return testdata.generate(numTraining, numVariables)
+	return testdata.generate(numTraining, 1)
 }
 
 // NewRastigrinF1 -

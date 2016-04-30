@@ -246,10 +246,12 @@ func (m *Mep) SetOper(operName string, state bool) {
 }
 
 // Oper - list of enabled operators
-func (m *Mep) Oper() []string {
+func (m *Mep) Oper(all bool) []string {
 	var operators []string
 	for index := 0; index < len(m.operators); index++ {
-		if m.operators[index].enabled {
+		if all {
+			operators = append(operators, m.operators[index].name)
+		} else if m.operators[index].enabled {
 			operators = append(operators, m.operators[index].name)
 		}
 	}
@@ -368,6 +370,15 @@ func (m *Mep) Best() (float64, string) {
 func (m *Mep) PrintBest() {
 	exp := m.parse("", m.pop[0], m.pop[0].bestIndex)
 	fmt.Printf("fitness = %f, expr=%s\n", m.pop[0].fitness, exp)
+}
+
+// PrintTestData - print the testdata
+func (m *Mep) PrintTestData() {
+	fmt.Println(strings.Join(m.td.Labels, ",") + ",target")
+	for row := range m.td.Train {
+		fmt.Print(strings.Replace(strings.Trim(fmt.Sprint(m.td.Train[row]), "[]"), " ", ",", -1))
+		fmt.Println("," + fmt.Sprint(m.td.Target[row]))
+	}
 }
 
 func (m *Mep) eval(c *chromosome) {

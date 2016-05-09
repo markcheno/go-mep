@@ -7,13 +7,15 @@ Licensed under terms of MIT license (see LICENSE)
 Usage:
   mep -h | -help
   mep -v | -version
-	mep -oper=true
+	mep -o | -oper
   mep [options] <filename>|testdata
 
 Options:
-  -h -help         			show help
-  -v -version       		show version
-	-oper=<bool>          show operators
+  -h -help         			print help
+  -v -version       		print version
+	-o -oper              print operators
+	-td                   print testdata
+	-summary              print summary only
 	-pop=<popSize>        sets population size (default=100)
 	-code=<codeLen>       sets code length (default=50)
 	-gens=<numGens>       sets number of generations to evolve
@@ -24,8 +26,6 @@ Options:
 	-const=num,min,max		sets random constant parameters (-const=num,min,max)
 	-enable=<op[,op]>     enables operators (comma separated list)
 	-disable=<op[,op]>    disables operators (comma separated list)
-	-td=<bool>            prints testdata
-	-summary=<bool>       prints summary only
 */
 package main
 
@@ -55,7 +55,7 @@ type mepFlags struct {
 	enable               string
 	disable              string
 	constants            string
-	showOperators        bool
+	operators            bool
 	version              bool
 	td                   bool
 	summary              bool
@@ -72,14 +72,15 @@ func main() {
 	flag.Float64Var(&flags.fitnessThreshold, "fitness", 0.0, "fitness threshold")
 	flag.Float64Var(&flags.mutationProbability, "mp", 0.1, "mutation probability")
 	flag.Float64Var(&flags.crossoverProbability, "cp", 0.9, "crossover probability")
-	flag.BoolVar(&flags.showOperators, "oper", false, "show list of operators")
 	flag.StringVar(&flags.enable, "enable", "", "list of operators to enable")
 	flag.StringVar(&flags.enable, "disable", "", "list of operators to disable")
 	flag.StringVar(&flags.constants, "const", "0,0,0", "constants: num,min,max")
 	flag.BoolVar(&flags.td, "td", false, "print testdata")
 	flag.BoolVar(&flags.summary, "summary", false, "print summary only")
-	flag.BoolVar(&flags.version, "v", false, "show version")
-	flag.BoolVar(&flags.version, "version", false, "show version")
+	flag.BoolVar(&flags.version, "v", false, "print version")
+	flag.BoolVar(&flags.version, "version", false, "print version")
+	flag.BoolVar(&flags.operators, "o", false, "print list of operators")
+	flag.BoolVar(&flags.operators, "oper", false, "print list of operators")
 
 	flag.Usage = func() {
 		fmt.Println("Usage:")
@@ -110,16 +111,16 @@ func main() {
 		os.Exit(0)
 	}
 
+	if flags.operators {
+		m := mep.New(mep.NewPiTest(1), mep.TotalErrorFF)
+		fmt.Println(strings.Trim(strings.Join(m.Oper(true), ","), "[]"))
+		os.Exit(0)
+	}
+
 	if flags.seed == 0 {
 		rand.Seed(time.Now().UTC().UnixNano())
 	} else {
 		rand.Seed(flags.seed)
-	}
-
-	if flags.showOperators {
-		m := mep.New(mep.NewPiTest(1), mep.TotalErrorFF)
-		fmt.Println(strings.Trim(strings.Join(m.Oper(true), ","), "[]"))
-		os.Exit(0)
 	}
 
 	filename := flag.Args()[0]

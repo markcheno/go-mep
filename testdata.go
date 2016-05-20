@@ -240,3 +240,14 @@ func NewSimpleConstantRegression3(numTraining int) TrainingData {
 	}
 	return testdata.generate(numTraining, 1)
 }
+
+// NewKepler -
+func NewKepler(numTraining int) TrainingData {
+	// period = sqrt(distance^3)
+	return TrainingData{
+		// Venus, Earth, Mars, Jupiter, Saturn, Uranus
+		Train:  [][]float64{[]float64{0.72}, []float64{1.0}, []float64{1.52}, []float64{5.2}, []float64{9.53}, []float64{19.6}},
+		Target: []float64{0.61, 1.0, 1.84, 11.9, 29.4, 83.5},
+		Labels: []string{"distance", "period"},
+	}
+}

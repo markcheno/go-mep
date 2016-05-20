@@ -85,6 +85,8 @@ type instruction struct {
 	op   int
 	adr1 int
 	adr2 int
+	adr3 int
+	adr4 int
 }
 
 type program []instruction
@@ -175,6 +177,16 @@ func New(td TrainingData, ff FitnessFunction) Mep {
 		{-9, "log", false},
 		{-10, "sqrt", false},
 		{-11, "abs", false},
+		{-12, "max", false},
+		{-13, "min", false},
+		{-14, "ifgtz", false},
+		{-15, "ifltz", false},
+		{-16, "ifgt", false},
+		{-17, "iflt", false},
+		{-18, "ifbgt", false},
+		{-19, "ifblt", false},
+		{-20, "and", false},
+		{-21, "or", false},
 	}
 
 	// defaults
@@ -418,7 +430,6 @@ func (m *Mep) eval(c *chromosome) {
 				for k := 0; k < m.numTraining; k++ {
 					m.results[i][k] = m.td.Train[k][c.program[i].op]
 				}
-
 			} else { // normal execution....
 				for k := 0; k < m.numTraining; k++ {
 					m.results[i][k] = m.results[c.program[i].adr1][k] / m.results[c.program[i].adr2][k]
@@ -452,6 +463,86 @@ func (m *Mep) eval(c *chromosome) {
 			for k := 0; k < m.numTraining; k++ {
 				m.results[i][k] = math.Abs(m.results[c.program[i].adr1][k])
 			}
+		case -12: // max
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] > m.results[c.program[i].adr2][k] {
+					m.results[i][k] = m.results[c.program[i].adr1][k]
+				} else {
+					m.results[i][k] = m.results[c.program[i].adr2][k]
+				}
+			}
+		case -13: // min
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] < m.results[c.program[i].adr2][k] {
+					m.results[i][k] = m.results[c.program[i].adr1][k]
+				} else {
+					m.results[i][k] = m.results[c.program[i].adr2][k]
+				}
+			}
+		case -14: // ifgtz
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] > 0.0 {
+					m.results[i][k] = m.results[c.program[i].adr2][k]
+				} else {
+					m.results[i][k] = m.results[c.program[i].adr3][k]
+				}
+			}
+		case -15: // ifltz
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] < 0.0 {
+					m.results[i][k] = m.results[c.program[i].adr2][k]
+				} else {
+					m.results[i][k] = m.results[c.program[i].adr3][k]
+				}
+			}
+		case -16: // ifgt
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] > m.results[c.program[i].adr2][k] {
+					m.results[i][k] = m.results[c.program[i].adr3][k]
+				} else {
+					m.results[i][k] = m.results[c.program[i].adr4][k]
+				}
+			}
+		case -17: // iflt
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] < m.results[c.program[i].adr2][k] {
+					m.results[i][k] = m.results[c.program[i].adr3][k]
+				} else {
+					m.results[i][k] = m.results[c.program[i].adr4][k]
+				}
+			}
+		case -18: // ifbgt
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] > m.results[c.program[i].adr2][k] {
+					m.results[i][k] = 1.0
+				} else {
+					m.results[i][k] = -1.0
+				}
+			}
+		case -19: // ifblt
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] < m.results[c.program[i].adr2][k] {
+					m.results[i][k] = 1.0
+				} else {
+					m.results[i][k] = -1.0
+				}
+			}
+		case -20: // and
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] > 0.0 && m.results[c.program[i].adr2][k] > 0.0 {
+					m.results[i][k] = 1.0
+				} else {
+					m.results[i][k] = -1.0
+				}
+			}
+		case -21: // or
+			for k := 0; k < m.numTraining; k++ {
+				if m.results[c.program[i].adr1][k] > 0.0 || m.results[c.program[i].adr2][k] > 0.0 {
+					m.results[i][k] = 1.0
+				} else {
+					m.results[i][k] = -1.0
+				}
+			}
 		default: // a variable
 			for k := 0; k < m.numTraining; k++ {
 				if c.program[i].op < m.numVariables {
@@ -476,6 +567,8 @@ func (m *Mep) parse(exp string, individual chromosome, poz int) string {
 	op := code[poz].op
 	adr1 := code[poz].adr1
 	adr2 := code[poz].adr2
+	adr3 := code[poz].adr3
+	adr4 := code[poz].adr4
 
 	if op == -1 { // +
 		exp = m.parse(exp, individual, adr1)
@@ -551,6 +644,88 @@ func (m *Mep) parse(exp string, individual chromosome, poz int) string {
 		exp += "abs("
 		exp = m.parse(exp, individual, adr1)
 		exp += ")"
+	} else if op == -12 { // max
+		exp += "max("
+		exp = m.parse(exp, individual, adr1)
+		exp += ","
+		exp = m.parse(exp, individual, adr2)
+		exp += ")"
+
+	} else if op == -13 { // min
+		exp += "min("
+		exp = m.parse(exp, individual, adr1)
+		exp += ","
+		exp = m.parse(exp, individual, adr2)
+		exp += ")"
+
+	} else if op == -14 { // ifgtz
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += ">0,"
+		exp = m.parse(exp, individual, adr2)
+		exp += ","
+		exp = m.parse(exp, individual, adr3)
+		exp += ")"
+
+	} else if op == -15 { // ifltz
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += "<0,"
+		exp = m.parse(exp, individual, adr2)
+		exp += ","
+		exp = m.parse(exp, individual, adr3)
+		exp += ")"
+
+	} else if op == -16 { // ifgt
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += ">"
+		exp = m.parse(exp, individual, adr2)
+		exp += ","
+		exp = m.parse(exp, individual, adr3)
+		exp += ","
+		exp = m.parse(exp, individual, adr4)
+		exp += ")"
+
+	} else if op == -17 { // iflt
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += "<"
+		exp = m.parse(exp, individual, adr2)
+		exp += ","
+		exp = m.parse(exp, individual, adr3)
+		exp += ","
+		exp = m.parse(exp, individual, adr4)
+		exp += ")"
+
+	} else if op == -18 { // ifbgt
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += ">"
+		exp = m.parse(exp, individual, adr2)
+		exp += "1,-1)"
+
+	} else if op == -19 { // ifblt
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += "<"
+		exp = m.parse(exp, individual, adr2)
+		exp += "1,-1)"
+
+	} else if op == -20 { // and
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += ">0 &&"
+		exp = m.parse(exp, individual, adr2)
+		exp += ">0,1,-1)"
+
+	} else if op == -21 { // or
+		exp += "iif("
+		exp = m.parse(exp, individual, adr1)
+		exp += ">0 ||"
+		exp = m.parse(exp, individual, adr2)
+		exp += ">0,1,-1)"
+
 	} else if op < m.numVariables {
 		exp += m.td.Labels[op]
 	} else {
@@ -622,6 +797,8 @@ func (m *Mep) randomChromosome() chromosome {
 		a.program[i].op = m.randomCode(i)
 		a.program[i].adr1 = m.randomAdr(i)
 		a.program[i].adr2 = m.randomAdr(i)
+		a.program[i].adr3 = m.randomAdr(i)
+		a.program[i].adr4 = m.randomAdr(i)
 	}
 
 	m.eval(&a)
@@ -730,6 +907,14 @@ func (m *Mep) mutation(aChromosome *chromosome) {
 
 		if rand.Float64() < m.mutationProbability {
 			aChromosome.program[i].adr2 = m.randomAdr(i)
+		}
+
+		if rand.Float64() < m.mutationProbability {
+			aChromosome.program[i].adr3 = m.randomAdr(i)
+		}
+
+		if rand.Float64() < m.mutationProbability {
+			aChromosome.program[i].adr4 = m.randomAdr(i)
 		}
 	}
 

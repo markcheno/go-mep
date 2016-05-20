@@ -73,7 +73,7 @@ func main() {
 	flag.Float64Var(&flags.mutationProbability, "mp", 0.1, "mutation probability")
 	flag.Float64Var(&flags.crossoverProbability, "cp", 0.9, "crossover probability")
 	flag.StringVar(&flags.enable, "enable", "", "list of operators to enable")
-	flag.StringVar(&flags.enable, "disable", "", "list of operators to disable")
+	flag.StringVar(&flags.disable, "disable", "", "list of operators to disable")
 	flag.StringVar(&flags.constants, "const", "0,0,0", "constants: num,min,max")
 	flag.BoolVar(&flags.td, "td", false, "print testdata")
 	flag.BoolVar(&flags.summary, "summary", false, "print summary only")
@@ -102,6 +102,7 @@ func main() {
 		fmt.Println("  simple1")
 		fmt.Println("  simple2")
 		fmt.Println("  simple3")
+		fmt.Println("  kepler")
 	}
 
 	flag.Parse()
@@ -121,6 +122,11 @@ func main() {
 		rand.Seed(time.Now().UTC().UnixNano())
 	} else {
 		rand.Seed(flags.seed)
+	}
+
+	if len(flag.Args()) == 0 {
+		flag.Usage()
+		os.Exit(0)
 	}
 
 	filename := flag.Args()[0]
@@ -157,6 +163,8 @@ func main() {
 		td = mep.NewSimpleConstantRegression2(100)
 	case "simple3":
 		td = mep.NewSimpleConstantRegression3(100)
+	case "kepler":
+		td = mep.NewKepler(100)
 	default:
 		td = mep.ReadTrainingData(filename, true, ",")
 	}

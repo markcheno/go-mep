@@ -23,15 +23,3 @@ func equals(t *testing.T, exp, act interface{}) {
 		t.FailNow()
 	}
 }
-
-func TestNew(t *testing.T) {
-	codeSize := 50
-	popSize := 100
-	mep := New(NewPi(50, 1), TotalErrorFF)
-	equals(t, mep.popSize, popSize)
-	equals(t, mep.codeLength, codeSize)
-	equals(t, mep.popSize, popSize)
-	equals(t, mep.mutationProbability, 0.1)
-	equals(t, mep.crossoverProbability, 0.9)
-	equals(t, len(mep.pop), mep.popSize)
-}

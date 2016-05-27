@@ -16,14 +16,15 @@ Options:
 	-o -oper              print operators
 	-td                   print testdata
 	-summary              print summary only
-	-pop=<popSize>        sets population size (default=100)
+	-popsize=<subPopSize> sets sub-population size (default=100)
+	-numpop=<numSubPop>   sets number of sub-populations (default=1)
 	-code=<codeLen>       sets code length (default=50)
 	-gens=<numGens>       sets number of generations to evolve
 	-seed=<int>           sets random number seed (default=unixNano time)
 	-fitness=<float>     	sets fitness threshold to stop evolving
 	-mp=<mutationProb>    sets mutation probability
 	-cp=<crossoverProb>		sets crossover probability
-	-const=num,min,max		sets random constant parameters (-const=num,min,max)
+	-const=num,min,max		sets random constant parameters (-const=num,min,max[,(e|pi|<fixed>)])
 	-enable=<op[,op]>     enables operators (comma separated list)
 	-disable=<op[,op]>    disables operators (comma separated list)
 */
@@ -33,6 +34,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/markcheno/go-mep"
+	"math"
 	"math/rand"
 	"os"
 	"strconv"
@@ -45,7 +47,8 @@ const (
 )
 
 type mepFlags struct {
-	popSize              int
+	subPopSize           int
+	numSubPops           int
 	codeLen              int
 	numGens              int
 	seed                 int64
@@ -65,16 +68,17 @@ func main() {
 
 	var flags mepFlags
 
-	flag.IntVar(&flags.popSize, "pop", 100, "sets population size")
+	flag.IntVar(&flags.subPopSize, "popsize", 100, "sets sub-population size (default=100)")
+	flag.IntVar(&flags.numSubPops, "numpop", 1, "sets number of sub-populations (default=1)")
 	flag.IntVar(&flags.codeLen, "code", 50, "sets code length")
 	flag.IntVar(&flags.numGens, "gens", 1000, "max number of generations to evolve")
 	flag.Int64Var(&flags.seed, "seed", 0, "random seed (default unixNano time)")
-	flag.Float64Var(&flags.fitnessThreshold, "fitness", 0.0, "fitness threshold")
+	flag.Float64Var(&flags.fitnessThreshold, "fitness", 0.01, "fitness threshold")
 	flag.Float64Var(&flags.mutationProbability, "mp", 0.1, "mutation probability")
 	flag.Float64Var(&flags.crossoverProbability, "cp", 0.9, "crossover probability")
 	flag.StringVar(&flags.enable, "enable", "", "list of operators to enable")
 	flag.StringVar(&flags.disable, "disable", "", "list of operators to disable")
-	flag.StringVar(&flags.constants, "const", "0,0,0", "constants: num,min,max")
+	flag.StringVar(&flags.constants, "const", "0,0,0", "constants: num,min,max[,(e|pi|<fixed>)]")
 	flag.BoolVar(&flags.td, "td", false, "print testdata")
 	flag.BoolVar(&flags.summary, "summary", false, "print summary only")
 	flag.BoolVar(&flags.version, "v", false, "print version")
@@ -103,6 +107,7 @@ func main() {
 		fmt.Println("  simple2")
 		fmt.Println("  simple3")
 		fmt.Println("  kepler")
+		fmt.Println("  booth")
 	}
 
 	flag.Parse()
@@ -113,7 +118,7 @@ func main() {
 	}
 
 	if flags.operators {
-		m := mep.New(mep.NewPiTest(1), mep.TotalErrorFF)
+		m := *mep.New(mep.NewPiTest(1), mep.TotalErrorFF)
 		fmt.Println(strings.Trim(strings.Join(m.Oper(true), ","), "[]"))
 		os.Exit(0)
 	}
@@ -131,7 +136,7 @@ func main() {
 
 	filename := flag.Args()[0]
 
-	var m mep.Mep
+	var m *mep.Mep
 	var td mep.TrainingData
 
 	switch filename {
@@ -142,7 +147,7 @@ func main() {
 	case "quarticpoly":
 		td = mep.NewQuarticPoly(100)
 	case "rastigrin":
-		td = mep.NewRastigrinF1(100, 5)
+		td = mep.NewRastigrinF1(100)
 	case "dejong":
 		td = mep.NewDejongF1(100)
 	case "schwefel":
@@ -165,6 +170,8 @@ func main() {
 		td = mep.NewSimpleConstantRegression3(100)
 	case "kepler":
 		td = mep.NewKepler(100)
+	case "booth":
+		td = mep.NewBooth(50)
 	default:
 		td = mep.ReadTrainingData(filename, true, ",")
 	}
@@ -181,14 +188,28 @@ func main() {
 	}
 
 	if flags.constants > "" {
+		var fixed []float64
 		tmp := strings.Split(flags.constants, ",")
-		num, _ := strconv.ParseInt(tmp[0], 10, 64)
-		min, _ := strconv.ParseFloat(tmp[1], 64)
-		max, _ := strconv.ParseFloat(tmp[2], 64)
-		m.SetConst(int(num), max, min)
+		numRand, _ := strconv.ParseInt(tmp[0], 10, 64)
+		minRand, _ := strconv.ParseFloat(tmp[1], 64)
+		maxRand, _ := strconv.ParseFloat(tmp[2], 64)
+		if len(tmp) > 3 {
+			for c := 3; c < len(tmp); c++ {
+				var tmp2 float64
+				if tmp[c] == "e" {
+					tmp2 = math.E
+				} else if tmp[c] == "pi" {
+					tmp2 = math.Pi
+				} else {
+					tmp2, _ = strconv.ParseFloat(tmp[c], 64)
+				}
+				fixed = append(fixed, tmp2)
+			}
+		}
+		m.SetConst(fixed, int(numRand), maxRand, minRand)
 	}
 
-	m.SetPop(flags.popSize, flags.codeLen)
+	m.SetPop(flags.subPopSize, flags.numSubPops, flags.codeLen)
 
 	if flags.td {
 		m.PrintTestData()
@@ -198,5 +219,5 @@ func main() {
 	fmt.Printf("Elapsed time: %s\n", elapsed)
 	fmt.Printf("Solution after %d generations:\n", gens)
 	m.PrintBest()
-
+	//m.PrintTestData()
 }

@@ -99,18 +99,21 @@ type chromosome struct {
 	fitness   float64
 	bestIndex int
 }
-type population []chromosome
+
+type subPopulation []chromosome
+
+type population []subPopulation
 
 // sort interface for population
-func (slice population) Len() int {
+func (slice subPopulation) Len() int {
 	return len(slice)
 }
 
-func (slice population) Less(i, j int) bool {
+func (slice subPopulation) Less(i, j int) bool {
 	return slice[i].fitness < slice[j].fitness
 }
 
-func (slice population) Swap(i, j int) {
+func (slice subPopulation) Swap(i, j int) {
 	slice[i], slice[j] = slice[j], slice[i]
 }
 
@@ -132,28 +135,33 @@ const (
 
 // Mep - primary class
 type Mep struct {
-	mutationProbability      float64
-	crossoverProbability     float64
-	popSize                  int
-	codeLength               int
-	td                       TrainingData
-	ff                       FitnessFunction
-	variablesProbability     float64
-	operatorsProbability     float64
-	randConstantsProbability float64
-	numRandConstants         int
-	randConstantsMin         float64
-	randConstantsMax         float64
-	numVariables             int
-	numTraining              int
-	pop                      population
-	results                  [][]float64
-	operators                []operator
-	crossoverType            CrossoverType
+	mutationProbability  float64
+	crossoverProbability float64
+	subPopSize           int
+	numSubpopulation     int
+	curSubpopulation     int
+	bestPop              int
+	codeLength           int
+	td                   TrainingData
+	ff                   FitnessFunction
+	variablesProbability float64
+	operatorsProbability float64
+	constantsProbability float64
+	numRandConstants     int
+	randConstantsMin     float64
+	randConstantsMax     float64
+	fixedConstants       constants
+	numConstants         int
+	numVariables         int
+	numTraining          int
+	pop                  population
+	results              [][][]float64
+	operators            []operator
+	crossoverType        CrossoverType
 }
 
 // New - create a new Multi-Expression population
-func New(td TrainingData, ff FitnessFunction) Mep {
+func New(td TrainingData, ff FitnessFunction) *Mep {
 
 	m := Mep{}
 	m.ff = ff
@@ -187,10 +195,19 @@ func New(td TrainingData, ff FitnessFunction) Mep {
 		{-19, "ifblt", false},
 		{-20, "and", false},
 		{-21, "or", false},
+		{-22, "pow", false},
+		{-23, "pow10", false},
+		{-24, "log10", false},
+		{-25, "log2", false},
+		{-26, "floor", false},
+		{-27, "ceil", false},
+		{-28, "inv", false},
+		{-29, "x2", false},
 	}
 
 	// defaults
-	m.popSize = 100
+	m.subPopSize = 100
+	m.numSubpopulation = 1
 	m.codeLength = 50
 	m.mutationProbability = 0.1
 	m.crossoverProbability = 0.9
@@ -199,17 +216,18 @@ func New(td TrainingData, ff FitnessFunction) Mep {
 	m.numRandConstants = 0
 	m.randConstantsMin = -1
 	m.randConstantsMax = 1
-	m.randConstantsProbability = 0
+	m.constantsProbability = 0
+	m.numConstants = 0
 	m.crossoverType = OneCutPoint
 
 	// initialize population
 	m.randomPopulation()
 
-	return m
+	return &m
 }
 
 // SetPop - set population size and code length (resets population)
-func (m *Mep) SetPop(popSize, codeLength int) {
+func (m *Mep) SetPop(popSize, numSubpopulation, codeLength int) {
 	if (popSize % 2) != 0 {
 		panic("invalid popSize, must be an even number")
 	}
@@ -217,28 +235,42 @@ func (m *Mep) SetPop(popSize, codeLength int) {
 	if codeLength < 4 {
 		panic("invalid codeLength, should be >= 4")
 	}
-	m.popSize = popSize
+	m.subPopSize = popSize
+	m.numSubpopulation = numSubpopulation
 	m.codeLength = codeLength
 	// initialize population
 	m.randomPopulation()
 }
 
-// SetConst - set number and range of random constants (resets population)
-func (m *Mep) SetConst(num int, min, max float64) {
-	if num > 0 {
-		m.numRandConstants = num
-		m.randConstantsMax = max
-		m.randConstantsMin = min
+// SetConst - set fixed and random constants (resets population)
+func (m *Mep) SetConst(fixed []float64, numRand int, minRand, maxRand float64) {
+
+	m.numConstants = numRand + len(fixed)
+
+	if m.numConstants > 0 {
 		m.variablesProbability = 0.5
 		m.operatorsProbability = 0.4
-		m.randConstantsProbability = 1 - m.variablesProbability - m.operatorsProbability
+		m.constantsProbability = 1 - m.variablesProbability - m.operatorsProbability
+
+	} else {
+		m.variablesProbability = 0.5
+		m.operatorsProbability = 0.5
+		m.constantsProbability = 0.0
+	}
+
+	if len(fixed) > 0 {
+		m.fixedConstants = make(constants, len(fixed))
+		copy(m.fixedConstants, fixed)
+	}
+
+	if numRand > 0 {
+		m.numRandConstants = numRand
+		m.randConstantsMax = maxRand
+		m.randConstantsMin = minRand
 	} else {
 		m.numRandConstants = 0
 		m.randConstantsMax = 0
 		m.randConstantsMin = 0
-		m.variablesProbability = 0.5
-		m.operatorsProbability = 0.5
-		m.randConstantsProbability = 0.0
 	}
 	// initialize population
 	m.randomPopulation()
@@ -270,7 +302,7 @@ func (m *Mep) Oper(all bool) []string {
 	return operators
 }
 
-// SetCrossover - crossover probability (valid range 0.0 - 1.0)
+// SetCrossover - crossover type and probability (valid range 0.0 - 1.0)
 func (m *Mep) SetCrossover(crossoverType CrossoverType, crossoverProbability float64) {
 	m.crossoverType = crossoverType
 	m.crossoverProbability = crossoverProbability
@@ -302,52 +334,72 @@ func (m *Mep) SetProb(mutationProbability, crossoverProbability float64) {
 // Evolve - one generation of population and sort for best fitness
 func (m *Mep) Evolve() {
 
-	if (m.variablesProbability + m.operatorsProbability + m.randConstantsProbability) != 1.0 {
+	if (m.variablesProbability + m.operatorsProbability + m.constantsProbability) != 1.0 {
 		panic("probabilities must sum to 1.0")
 	}
 
-	offspring1 := m.randomChromosome()
-	offspring2 := m.randomChromosome()
+	for p := 0; p < m.numSubpopulation; p++ {
 
-	for k := 0; k < m.popSize; k += 2 {
+		offspring1 := m.randomChromosome(p)
+		offspring2 := m.randomChromosome(p)
 
-		// binary tournament
-		r1 := m.tournamentSelection(2)
-		r2 := m.tournamentSelection(2)
-		m.copyChromosome(&m.pop[r1], &offspring1)
-		m.copyChromosome(&m.pop[r2], &offspring2)
-		// crossover
-		if rand.Float64() < m.crossoverProbability {
-			if m.crossoverType == OneCutPoint {
-				m.oneCutPointCrossover(&m.pop[r1], &m.pop[r2], &offspring1, &offspring2)
-			} else if m.crossoverType == Uniform {
-				m.uniformCrossover(&m.pop[r1], &m.pop[r2], &offspring1, &offspring2)
-			} else {
-				panic("invalid crossover type")
+		for k := 0; k < m.subPopSize; k += 2 {
+
+			// binary tournament
+			r1 := m.tournamentSelection(p, 2)
+			r2 := m.tournamentSelection(p, 2)
+			m.copyChromosome(&m.pop[p][r1], &offspring1)
+			m.copyChromosome(&m.pop[p][r2], &offspring2)
+			// crossover
+			if rand.Float64() < m.crossoverProbability {
+				if m.crossoverType == OneCutPoint {
+					m.oneCutPointCrossover(&m.pop[p][r1], &m.pop[p][r2], &offspring1, &offspring2)
+				} else if m.crossoverType == Uniform {
+					m.uniformCrossover(&m.pop[p][r1], &m.pop[p][r2], &offspring1, &offspring2)
+				} else {
+					panic("invalid crossover type")
+				}
+			}
+
+			// mutatation
+			m.mutation(&offspring1)
+			m.eval(m.results[p], &offspring1)
+
+			m.mutation(&offspring2)
+			m.eval(m.results[p], &offspring2)
+
+			// replace the worst in the population
+			if offspring1.fitness < m.pop[p][m.subPopSize-1].fitness {
+				m.copyChromosome(&offspring1, &m.pop[p][m.subPopSize-1])
+			}
+			if offspring2.fitness < m.pop[p][m.subPopSize-1].fitness {
+				m.copyChromosome(&offspring2, &m.pop[p][m.subPopSize-1])
 			}
 		}
 
-		// mutatation
-		m.mutation(&offspring1)
-		m.eval(&offspring1)
+		// now copy one individual from one population to the next one.
+		// the copied invidual will replace the worst in the next one (if is better)
+		k := rand.Intn(m.subPopSize) // the individual to be copied
 
-		m.mutation(&offspring2)
-		m.eval(&offspring2)
+		// replace the worst in the next population (p + 1) - only if is better
+		indexNextPop := (p + 1) % m.numSubpopulation // index of the next subpopulation (taken in circular order)
 
-		// replace the worst in the population
-		if offspring1.fitness < m.pop[m.popSize-1].fitness {
-			m.copyChromosome(&offspring1, &m.pop[m.popSize-1])
-		}
-		if offspring2.fitness < m.pop[m.popSize-1].fitness {
-			m.copyChromosome(&offspring2, &m.pop[m.popSize-1])
+		if m.pop[p][k].fitness < m.pop[indexNextPop][m.subPopSize-1].fitness {
+			m.copyChromosome(&m.pop[p][k], &m.pop[indexNextPop][m.subPopSize-1])
+			sort.Sort(m.pop[indexNextPop])
 		}
 
-		sort.Sort(m.pop)
+		sort.Sort(m.pop[p])
+
+		if m.pop[p][0].fitness < m.pop[m.bestPop][0].fitness {
+			m.bestPop = p
+		}
 	}
 }
 
 // Solve - Evolve until fitnessThreshold or numGens is reached. Returns generations and total time
 func (m *Mep) Solve(numGens int, fitnessThreshold float64, showProgress bool) (int, time.Duration) {
+
 	start := time.Now()
 	gens := 0
 	for gens < numGens {
@@ -356,7 +408,7 @@ func (m *Mep) Solve(numGens int, fitnessThreshold float64, showProgress bool) (i
 			m.PrintBest()
 		}
 		gens++
-		if m.BestFitness() < fitnessThreshold {
+		if m.BestFitness() <= fitnessThreshold {
 			break
 		}
 	}
@@ -365,23 +417,23 @@ func (m *Mep) Solve(numGens int, fitnessThreshold float64, showProgress bool) (i
 
 // BestFitness - return the best fitness of the population
 func (m *Mep) BestFitness() float64 {
-	return m.pop[0].fitness
+	return m.pop[m.bestPop][0].fitness
 }
 
 // BestExpr - return the best expression of the population
 func (m *Mep) BestExpr() string {
-	return m.parse("", m.pop[0], m.pop[0].bestIndex)
+	return m.parse("", m.pop[m.bestPop][0], m.pop[m.bestPop][0].bestIndex)
 }
 
 // Best - return the best fitness,expression of the population
 func (m *Mep) Best() (float64, string) {
-	return m.pop[0].fitness, m.parse("", m.pop[0], m.pop[0].bestIndex)
+	return m.pop[m.bestPop][0].fitness, m.parse("", m.pop[m.bestPop][0], m.pop[m.bestPop][0].bestIndex)
 }
 
 // PrintBest - print the best member of the population
 func (m *Mep) PrintBest() {
-	exp := m.parse("", m.pop[0], m.pop[0].bestIndex)
-	fmt.Printf("fitness = %f, expr=%s\n", m.pop[0].fitness, exp)
+	exp := m.parse("", m.pop[m.bestPop][0], m.pop[m.bestPop][0].bestIndex)
+	fmt.Printf("fitness = %f, expr=%s\n", m.pop[m.bestPop][0].fitness, exp)
 }
 
 // PrintTestData - print the testdata
@@ -393,7 +445,7 @@ func (m *Mep) PrintTestData() {
 	}
 }
 
-func (m *Mep) eval(c *chromosome) {
+func (m *Mep) eval(results [][]float64, c *chromosome) {
 
 	c.fitness = 1e+308
 	c.bestIndex = -1
@@ -401,159 +453,189 @@ func (m *Mep) eval(c *chromosome) {
 	// we keep intermediate values in a matrix because when an error occurs (like division by 0) we mutate that gene into a variables.
 	// in such case it is faster to have all intermediate results until current gene, so that we don't have to recompute them again.
 
-	var isErrorCase bool // division by zero, other errors
-
 	for i := 0; i < m.codeLength; i++ { // read the chromosome from top to down
 
-		isErrorCase = false
+		isErrorCase := false
 		switch c.program[i].op {
 		case -1: // +
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = m.results[c.program[i].adr1][k] + m.results[c.program[i].adr2][k]
+				results[i][k] = results[c.program[i].adr1][k] + results[c.program[i].adr2][k]
 			}
 		case -2: // -
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = m.results[c.program[i].adr1][k] - m.results[c.program[i].adr2][k]
+				results[i][k] = results[c.program[i].adr1][k] - results[c.program[i].adr2][k]
 			}
 		case -3: // *
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = m.results[c.program[i].adr1][k] * m.results[c.program[i].adr2][k]
+				results[i][k] = results[c.program[i].adr1][k] * results[c.program[i].adr2][k]
 			}
 		case -4: //  /
 			for k := 0; k < m.numTraining; k++ {
-				if math.Abs(m.results[c.program[i].adr2][k]) < 1e-6 { // a small constant
+				if math.Abs(results[c.program[i].adr2][k]) < 1e-6 { // a small constant
 					isErrorCase = true
 				}
 			}
 			if isErrorCase { // an division by zero error occured !!!
 				c.program[i].op = rand.Intn(m.numVariables) // the gene is mutated into a terminal
 				for k := 0; k < m.numTraining; k++ {
-					m.results[i][k] = m.td.Train[k][c.program[i].op]
+					results[i][k] = m.td.Train[k][c.program[i].op]
 				}
 			} else { // normal execution....
 				for k := 0; k < m.numTraining; k++ {
-					m.results[i][k] = m.results[c.program[i].adr1][k] / m.results[c.program[i].adr2][k]
+					results[i][k] = results[c.program[i].adr1][k] / results[c.program[i].adr2][k]
 				}
 			}
 		case -5: //  sin
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = math.Sin(m.results[c.program[i].adr1][k])
+				results[i][k] = math.Sin(results[c.program[i].adr1][k])
 			}
 		case -6: //  cos
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = math.Cos(m.results[c.program[i].adr1][k])
+				results[i][k] = math.Cos(results[c.program[i].adr1][k])
 			}
 		case -7: //  tan
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = math.Tan(m.results[c.program[i].adr1][k])
+				results[i][k] = math.Tan(results[c.program[i].adr1][k])
 			}
 		case -8: //  exp
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = math.Exp(m.results[c.program[i].adr1][k])
+				results[i][k] = math.Exp(results[c.program[i].adr1][k])
 			}
 		case -9: //  log
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = math.Log(m.results[c.program[i].adr1][k])
+				results[i][k] = math.Log(results[c.program[i].adr1][k])
 			}
 		case -10: //  sqrt
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = math.Sqrt(m.results[c.program[i].adr1][k])
+				results[i][k] = math.Sqrt(results[c.program[i].adr1][k])
 			}
 		case -11: //  abs
 			for k := 0; k < m.numTraining; k++ {
-				m.results[i][k] = math.Abs(m.results[c.program[i].adr1][k])
+				results[i][k] = math.Abs(results[c.program[i].adr1][k])
 			}
 		case -12: // max
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] > m.results[c.program[i].adr2][k] {
-					m.results[i][k] = m.results[c.program[i].adr1][k]
+				if results[c.program[i].adr1][k] > results[c.program[i].adr2][k] {
+					results[i][k] = results[c.program[i].adr1][k]
 				} else {
-					m.results[i][k] = m.results[c.program[i].adr2][k]
+					results[i][k] = results[c.program[i].adr2][k]
 				}
 			}
 		case -13: // min
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] < m.results[c.program[i].adr2][k] {
-					m.results[i][k] = m.results[c.program[i].adr1][k]
+				if results[c.program[i].adr1][k] < results[c.program[i].adr2][k] {
+					results[i][k] = results[c.program[i].adr1][k]
 				} else {
-					m.results[i][k] = m.results[c.program[i].adr2][k]
+					results[i][k] = results[c.program[i].adr2][k]
 				}
 			}
 		case -14: // ifgtz
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] > 0.0 {
-					m.results[i][k] = m.results[c.program[i].adr2][k]
+				if results[c.program[i].adr1][k] > 0.0 {
+					results[i][k] = results[c.program[i].adr2][k]
 				} else {
-					m.results[i][k] = m.results[c.program[i].adr3][k]
+					results[i][k] = results[c.program[i].adr3][k]
 				}
 			}
 		case -15: // ifltz
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] < 0.0 {
-					m.results[i][k] = m.results[c.program[i].adr2][k]
+				if results[c.program[i].adr1][k] < 0.0 {
+					results[i][k] = results[c.program[i].adr2][k]
 				} else {
-					m.results[i][k] = m.results[c.program[i].adr3][k]
+					results[i][k] = results[c.program[i].adr3][k]
 				}
 			}
 		case -16: // ifgt
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] > m.results[c.program[i].adr2][k] {
-					m.results[i][k] = m.results[c.program[i].adr3][k]
+				if results[c.program[i].adr1][k] > results[c.program[i].adr2][k] {
+					results[i][k] = results[c.program[i].adr3][k]
 				} else {
-					m.results[i][k] = m.results[c.program[i].adr4][k]
+					results[i][k] = results[c.program[i].adr4][k]
 				}
 			}
 		case -17: // iflt
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] < m.results[c.program[i].adr2][k] {
-					m.results[i][k] = m.results[c.program[i].adr3][k]
+				if results[c.program[i].adr1][k] < results[c.program[i].adr2][k] {
+					results[i][k] = results[c.program[i].adr3][k]
 				} else {
-					m.results[i][k] = m.results[c.program[i].adr4][k]
+					results[i][k] = results[c.program[i].adr4][k]
 				}
 			}
 		case -18: // ifbgt
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] > m.results[c.program[i].adr2][k] {
-					m.results[i][k] = 1.0
+				if results[c.program[i].adr1][k] > results[c.program[i].adr2][k] {
+					results[i][k] = 1.0
 				} else {
-					m.results[i][k] = -1.0
+					results[i][k] = -1.0
 				}
 			}
 		case -19: // ifblt
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] < m.results[c.program[i].adr2][k] {
-					m.results[i][k] = 1.0
+				if results[c.program[i].adr1][k] < results[c.program[i].adr2][k] {
+					results[i][k] = 1.0
 				} else {
-					m.results[i][k] = -1.0
+					results[i][k] = -1.0
 				}
 			}
 		case -20: // and
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] > 0.0 && m.results[c.program[i].adr2][k] > 0.0 {
-					m.results[i][k] = 1.0
+				if results[c.program[i].adr1][k] > 0.0 && results[c.program[i].adr2][k] > 0.0 {
+					results[i][k] = 1.0
 				} else {
-					m.results[i][k] = -1.0
+					results[i][k] = -1.0
 				}
 			}
 		case -21: // or
 			for k := 0; k < m.numTraining; k++ {
-				if m.results[c.program[i].adr1][k] > 0.0 || m.results[c.program[i].adr2][k] > 0.0 {
-					m.results[i][k] = 1.0
+				if results[c.program[i].adr1][k] > 0.0 || results[c.program[i].adr2][k] > 0.0 {
+					results[i][k] = 1.0
 				} else {
-					m.results[i][k] = -1.0
+					results[i][k] = -1.0
 				}
+			}
+		case -22: // pow
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = math.Pow(results[c.program[i].adr1][k], results[c.program[i].adr2][k])
+			}
+		case -23: // pow10
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = math.Pow10(int(results[c.program[i].adr1][k]))
+			}
+		case -24: // log10
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = math.Log10(results[c.program[i].adr1][k])
+			}
+		case -25: // log2
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = math.Log2(results[c.program[i].adr1][k])
+			}
+		case -26: // floor
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = math.Floor(results[c.program[i].adr1][k])
+			}
+		case -27: // ceil
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = math.Ceil(results[c.program[i].adr1][k])
+			}
+		case -28: // inv
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = 1.0 / results[c.program[i].adr1][k]
+			}
+		case -29: // x2
+			for k := 0; k < m.numTraining; k++ {
+				results[i][k] = results[c.program[i].adr1][k] * results[c.program[i].adr1][k]
 			}
 		default: // a variable
 			for k := 0; k < m.numTraining; k++ {
 				if c.program[i].op < m.numVariables {
-					m.results[i][k] = m.td.Train[k][c.program[i].op]
+					results[i][k] = m.td.Train[k][c.program[i].op]
 				} else {
-					m.results[i][k] = c.constants[c.program[i].op-m.numVariables]
+					results[i][k] = c.constants[c.program[i].op-m.numVariables]
 				}
 			}
 		}
 
-		fitness := m.ff(m.results[i], m.td.Target)
+		fitness := m.ff(results[i], m.td.Target)
 		if c.fitness > fitness {
 			c.fitness = fitness
 			c.bestIndex = i
@@ -726,8 +808,51 @@ func (m *Mep) parse(exp string, individual chromosome, poz int) string {
 		exp = m.parse(exp, individual, adr2)
 		exp += ">0,1,-1)"
 
+	} else if op == -22 { // pow
+		exp += "pow("
+		exp = m.parse(exp, individual, adr1)
+		exp += ","
+		exp = m.parse(exp, individual, adr2)
+		exp += ")"
+
+	} else if op == -23 { // pow10
+		exp += "pow10("
+		exp = m.parse(exp, individual, adr1)
+		exp += ")"
+
+	} else if op == -24 { // log10
+		exp += "log10("
+		exp = m.parse(exp, individual, adr1)
+		exp += ")"
+
+	} else if op == -25 { // log2
+		exp += "log2("
+		exp = m.parse(exp, individual, adr1)
+		exp += ")"
+
+	} else if op == -26 { // floor
+		exp += "floor("
+		exp = m.parse(exp, individual, adr1)
+		exp += ")"
+
+	} else if op == -27 { // ceil
+		exp += "ceil("
+		exp = m.parse(exp, individual, adr1)
+		exp += ")"
+
+	} else if op == -28 { // inv
+		exp += "inv("
+		exp = m.parse(exp, individual, adr1)
+		exp += ")"
+
+	} else if op == -29 { // x2
+		exp += "x2("
+		exp = m.parse(exp, individual, adr1)
+		exp += ")"
+
 	} else if op < m.numVariables {
 		exp += m.td.Labels[op]
+
 	} else {
 		exp += fmt.Sprintf("(%f)", individual.constants[op-m.numVariables])
 	}
@@ -736,11 +861,11 @@ func (m *Mep) parse(exp string, individual chromosome, poz int) string {
 
 func (m *Mep) randomTerminal() int {
 	var op int
-	prob := rand.Float64() * (m.variablesProbability + m.randConstantsProbability)
+	prob := rand.Float64() * (m.variablesProbability + m.constantsProbability)
 	if prob <= m.variablesProbability {
 		op = rand.Intn(m.numVariables)
 	} else {
-		op = m.numVariables + rand.Intn(m.numRandConstants)
+		op = m.numVariables + rand.Intn(m.numConstants)
 	}
 	return op
 }
@@ -765,7 +890,7 @@ func (m *Mep) randomCode(index int) int {
 		if p <= m.operatorsProbability+m.variablesProbability {
 			op = rand.Intn(m.numVariables) // a variable
 		} else {
-			op = m.numVariables + rand.Intn(m.numRandConstants) // index of a constant
+			op = m.numVariables + rand.Intn(m.numConstants) // index of a constant
 		}
 
 	}
@@ -773,19 +898,24 @@ func (m *Mep) randomCode(index int) int {
 }
 
 func (m *Mep) randomConstant() float64 {
+	idx := rand.Intn(m.numConstants)
+	if idx < len(m.fixedConstants) {
+		return m.fixedConstants[idx]
+	}
 	return rand.Float64()*(m.randConstantsMax-m.randConstantsMin) + m.randConstantsMin
 }
 
-func (m *Mep) randomChromosome() chromosome {
+func (m *Mep) randomChromosome(subPop int) chromosome {
 
 	a := chromosome{}
 	a.program = make(program, m.codeLength)
-	if m.numRandConstants > 0 {
-		a.constants = make(constants, m.numRandConstants)
+
+	if m.numConstants > 0 {
+		a.constants = make(constants, m.numConstants)
 	}
 
-	// generate constants first
-	for c := 0; c < m.numRandConstants; c++ {
+	// generate random constants
+	for c := 0; c < m.numConstants; c++ {
 		a.constants[c] = m.randomConstant()
 	}
 
@@ -801,7 +931,7 @@ func (m *Mep) randomChromosome() chromosome {
 		a.program[i].adr4 = m.randomAdr(i)
 	}
 
-	m.eval(&a)
+	m.eval(m.results[subPop], &a)
 
 	return a
 }
@@ -809,19 +939,35 @@ func (m *Mep) randomChromosome() chromosome {
 func (m *Mep) randomPopulation() {
 
 	// allocate results matrix
-	m.results = make([][]float64, m.codeLength)
-	for i := 0; i < m.codeLength; i++ {
-		m.results[i] = make([]float64, m.numTraining)
+
+	m.results = make([][][]float64, m.numSubpopulation)
+	for p := 0; p < m.numSubpopulation; p++ {
+		m.results[p] = make([][]float64, m.codeLength)
+		for i := 0; i < m.codeLength; i++ {
+			m.results[p][i] = make([]float64, m.numTraining)
+		}
 	}
 
-	// create a new random population
-	m.pop = make(population, m.popSize)
-	for i := 0; i < m.popSize; i++ {
-		m.pop[i] = m.randomChromosome()
+	// create new random population(s)
+	m.pop = make(population, m.numSubpopulation)
+	for p := 0; p < m.numSubpopulation; p++ {
+
+		m.pop[p] = make(subPopulation, m.subPopSize)
+		for i := 0; i < m.subPopSize; i++ {
+			m.pop[p][i] = m.randomChromosome(p)
+		}
+		// sort by fitness ascending
+		sort.Sort(m.pop[p])
 	}
 
-	// sort by fitness ascending
-	sort.Sort(m.pop)
+	// find the best individual
+	m.bestPop = 0 // the index of the subpopulation containing the best invidual
+	for p := 1; p < m.numSubpopulation; p++ {
+		if m.pop[p][0].fitness < m.pop[m.bestPop][0].fitness {
+			m.bestPop = p
+		}
+	}
+
 }
 
 func (m *Mep) oneCutPointCrossover(parent1, parent2, offspring1, offspring2 *chromosome) {
@@ -837,13 +983,13 @@ func (m *Mep) oneCutPointCrossover(parent1, parent2, offspring1, offspring2 *chr
 	}
 
 	// now the constants
-	if m.numRandConstants > 0 {
-		cuttingPoint = rand.Intn(m.numRandConstants)
+	if m.numConstants > 0 {
+		cuttingPoint = rand.Intn(m.numConstants)
 		for i := 0; i < cuttingPoint; i++ {
 			offspring1.constants[i] = parent1.constants[i]
 			offspring2.constants[i] = parent2.constants[i]
 		}
-		for i := cuttingPoint; i < m.numRandConstants; i++ {
+		for i := cuttingPoint; i < m.numConstants; i++ {
 			offspring1.constants[i] = parent1.constants[i]
 			offspring2.constants[i] = parent2.constants[i]
 		}
@@ -864,7 +1010,7 @@ func (m *Mep) uniformCrossover(parent1, parent2, offspring1, offspring2 *chromos
 	}
 
 	// constants
-	for i := 0; i < m.numRandConstants; i++ {
+	for i := 0; i < m.numConstants; i++ {
 		if (rand.Int() % 2) == 0 {
 			offspring1.constants[i] = parent1.constants[i]
 			offspring2.constants[i] = parent2.constants[i]
@@ -875,12 +1021,12 @@ func (m *Mep) uniformCrossover(parent1, parent2, offspring1, offspring2 *chromos
 	}
 }
 
-func (m *Mep) tournamentSelection(tournamentSize int) int {
+func (m *Mep) tournamentSelection(subPop, tournamentSize int) int {
 
-	p := rand.Intn(m.popSize)
+	p := rand.Intn(m.subPopSize)
 	for i := 1; i < tournamentSize; i++ {
-		r := rand.Intn(m.popSize)
-		if m.pop[r].fitness < m.pop[p].fitness {
+		r := rand.Intn(m.subPopSize)
+		if m.pop[subPop][r].fitness < m.pop[subPop][p].fitness {
 			p = r
 		}
 	}
@@ -919,7 +1065,7 @@ func (m *Mep) mutation(aChromosome *chromosome) {
 	}
 
 	// mutate the constants
-	for c := 0; c < m.numRandConstants; c++ {
+	for c := 0; c < m.numConstants; c++ {
 		if rand.Float64() < m.mutationProbability {
 			aChromosome.constants[c] = m.randomConstant()
 		}
@@ -932,7 +1078,7 @@ func (m *Mep) copyChromosome(source, dest *chromosome) {
 		dest.program[i] = source.program[i]
 	}
 
-	for i := 0; i < m.numRandConstants; i++ {
+	for i := 0; i < m.numConstants; i++ {
 		dest.constants[i] = source.constants[i]
 	}
 	dest.fitness = source.fitness

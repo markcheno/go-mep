@@ -31,7 +31,7 @@ func (t *testData) generate(numTraining, numVariables int) TrainingData {
 }
 
 // NewAckley -
-func NewAckley(numTraining, numVariables int) TrainingData {
+func NewAckley(numTraining int) TrainingData {
 	testdata := testData{
 		xmin: -32,
 		xmax: 32,
@@ -49,11 +49,11 @@ func NewAckley(numTraining, numVariables int) TrainingData {
 			return -a*math.Exp(-b*math.Sqrt(1.0/n*s1)) - math.Exp(1.0/n*s2) + a + math.Exp(1.0)
 		},
 	}
-	return testdata.generate(numTraining, numVariables)
+	return testdata.generate(numTraining, 2)
 }
 
 // NewRosenbrock -
-func NewRosenbrock(numTraining, numVariables int) TrainingData {
+func NewRosenbrock(numTraining int) TrainingData {
 	testdata := testData{
 		xmin: -32,
 		xmax: 32,
@@ -65,7 +65,7 @@ func NewRosenbrock(numTraining, numVariables int) TrainingData {
 			return sum
 		},
 	}
-	return testdata.generate(numTraining, numVariables)
+	return testdata.generate(numTraining, 2)
 }
 
 // NewPiTest -
@@ -81,7 +81,7 @@ func NewPiTest(numTraining int) TrainingData {
 }
 
 // NewRastigrinF1 -
-func NewRastigrinF1(numTraining, numVariables int) TrainingData {
+func NewRastigrinF1(numTraining int) TrainingData {
 	testdata := testData{
 		xmin: -5.12,
 		xmax: 5.12,
@@ -94,7 +94,7 @@ func NewRastigrinF1(numTraining, numVariables int) TrainingData {
 			return 10*n + s
 		},
 	}
-	return testdata.generate(numTraining, numVariables)
+	return testdata.generate(numTraining, 2)
 }
 
 // NewQuarticPoly -
@@ -250,4 +250,19 @@ func NewKepler(numTraining int) TrainingData {
 		Target: []float64{0.61, 1.0, 1.84, 11.9, 29.4, 83.5},
 		Labels: []string{"distance", "period"},
 	}
+}
+
+// NewBooth -
+func NewBooth(numTraining int) TrainingData {
+	testdata := testData{
+		xmin: -10,
+		xmax: 10,
+		eval: func(terms []float64) float64 {
+
+			term1 := math.Pow(terms[0]+2*terms[1]-7, 2)
+			term2 := math.Pow(2*terms[0]+terms[1]-5, 2)
+			return term1 + term2
+		},
+	}
+	return testdata.generate(numTraining, 2)
 }

@@ -202,7 +202,7 @@ func New(td TrainingData, ff FitnessFunction) *Mep {
 		{-26, "floor", false},
 		{-27, "ceil", false},
 		{-28, "inv", false},
-		{-29, "x2", false},
+		{-29, "square", false},
 	}
 
 	// defaults
@@ -621,7 +621,7 @@ func (m *Mep) eval(results [][]float64, c *chromosome) {
 			for k := 0; k < m.numTraining; k++ {
 				results[i][k] = 1.0 / results[c.program[i].adr1][k]
 			}
-		case -29: // x2
+		case -29: // square
 			for k := 0; k < m.numTraining; k++ {
 				results[i][k] = results[c.program[i].adr1][k] * results[c.program[i].adr1][k]
 			}
@@ -845,8 +845,8 @@ func (m *Mep) parse(exp string, individual chromosome, poz int) string {
 		exp = m.parse(exp, individual, adr1)
 		exp += ")"
 
-	} else if op == -29 { // x2
-		exp += "x2("
+	} else if op == -29 { // square
+		exp += "square("
 		exp = m.parse(exp, individual, adr1)
 		exp += ")"
 

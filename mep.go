@@ -1,10 +1,11 @@
 package mep
 
 import (
+	"bufio"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +33,16 @@ func MeanErrorFF(signal, target []float64) float64 {
 	return mean / float64(len(signal))
 }
 
+// ClassificationFF -
+func ClassificationFF(signal, target []float64) float64 {
+
+	logLoss := 1e-15
+	for i := 0; i < len(signal); i++ {
+		logLoss += target[i]*math.Log(signal[i]) + (1.0-target[i])*math.Log(1.0-signal[i])
+	}
+	return -1.0 / float64(len(signal)) * logLoss
+}
+
 // TrainingData -
 type TrainingData struct {
 	Train  [][]float64
@@ -44,6 +55,42 @@ func ReadTrainingData(filename string, header bool, sep string) TrainingData {
 
 	td := TrainingData{}
 
+	inFile, _ := os.Open(filename)
+	defer inFile.Close()
+	scanner := bufio.NewScanner(inFile)
+	scanner.Split(bufio.ScanLines)
+
+	if header {
+		scanner.Scan()
+		headerLine := scanner.Text()
+		td.Labels = strings.Split(strings.Replace(headerLine, "\"", "", -1), sep)
+	}
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		var floats []float64
+		for _, f := range strings.Split(line, sep) {
+			x, _ := strconv.ParseFloat(f, 64)
+			floats = append(floats, x)
+		}
+		td.Train = append(td.Train, floats[0:len(floats)-1])
+		td.Target = append(td.Target, floats[len(floats)-1])
+	}
+
+	if !header {
+		for i := 0; i < len(td.Train[0])+1; i++ {
+			td.Labels = append(td.Labels, fmt.Sprintf("x%d", i))
+		}
+	}
+
+	return td
+}
+
+/*
+func ReadTrainingData(filename string, header bool, sep string) TrainingData {
+
+	td := TrainingData{}
+
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return td
@@ -51,9 +98,10 @@ func ReadTrainingData(filename string, header bool, sep string) TrainingData {
 	lines := strings.Split(string(content), "\n")
 
 	if header {
-		td.Labels = strings.Split(lines[0], sep)
+		td.Labels = strings.Split(strings.Replace(lines[0], "\"", "", -1), sep)
 		lines = append(lines[:0], lines[1:]...)
 	}
+	fmt.Println(td.Labels)
 
 	td.Train = make([][]float64, len(lines))
 	td.Target = make([]float64, len(lines))
@@ -76,6 +124,7 @@ func ReadTrainingData(filename string, header bool, sep string) TrainingData {
 
 	return td
 }
+*/
 
 type instruction struct {
 	// either a variable, operator or constant
@@ -169,6 +218,7 @@ func New(td TrainingData, ff FitnessFunction) *Mep {
 
 	m.numTraining = len(m.td.Train)
 	m.numVariables = len(m.td.Train[0])
+	fmt.Printf("numTraining=%d, numVariables=%d\n", m.numTraining, m.numVariables)
 	if m.numTraining == 0 || m.numVariables == 0 {
 		panic("Invalid data")
 	}
@@ -433,7 +483,7 @@ func (m *Mep) Best() (float64, string) {
 // PrintBest - print the best member of the population
 func (m *Mep) PrintBest() {
 	exp := m.parse("", m.pop[m.bestPop][0], m.pop[m.bestPop][0].bestIndex)
-	fmt.Printf("fitness = %f, expr=%s\n", m.pop[m.bestPop][0].fitness, exp)
+	fmt.Printf("fitness = %f, expr='%s'\n", m.pop[m.bestPop][0].fitness, exp)
 }
 
 // PrintTestData - print the testdata

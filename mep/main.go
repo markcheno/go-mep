@@ -62,6 +62,7 @@ type mepFlags struct {
 	version              bool
 	td                   bool
 	summary              bool
+	regression           bool
 }
 
 func main() {
@@ -81,6 +82,7 @@ func main() {
 	flag.StringVar(&flags.constants, "const", "0,0,0", "constants: num,min,max[,(e|pi|<fixed>)]")
 	flag.BoolVar(&flags.td, "td", false, "print testdata")
 	flag.BoolVar(&flags.summary, "summary", false, "print summary only")
+	flag.BoolVar(&flags.regression, "regression", true, "regression problem (classification=false)")
 	flag.BoolVar(&flags.version, "v", false, "print version")
 	flag.BoolVar(&flags.version, "version", false, "print version")
 	flag.BoolVar(&flags.operators, "o", false, "print list of operators")
@@ -176,7 +178,12 @@ func main() {
 		td = mep.ReadTrainingData(filename, true, ",")
 	}
 
-	m = mep.New(td, mep.TotalErrorFF)
+	if flags.regression {
+		m = mep.New(td, mep.TotalErrorFF)
+	} else {
+		m = mep.New(td, mep.ClassificationFF)
+	}
+
 	m.SetProb(flags.mutationProbability, flags.crossoverProbability)
 
 	for _, op := range strings.Split(flags.enable, ",") {

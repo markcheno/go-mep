@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+// see: http://blog.loadimpact.com/random-thoughts-about-go
+func intn(max int) int {
+	return int((rand.Float64() * float64(max)) + 0.5)
+}
+
 // FitnessFunction -
 type FitnessFunction func(signal, target []float64) float64
 
@@ -483,7 +488,7 @@ func (m *Mep) Best() (float64, string) {
 // PrintBest - print the best member of the population
 func (m *Mep) PrintBest() {
 	exp := m.parse("", m.pop[m.bestPop][0], m.pop[m.bestPop][0].bestIndex)
-	fmt.Printf("fitness = %f, expr='%s'\n", m.pop[m.bestPop][0].fitness, exp)
+	fmt.Printf("expr='%s' # fitness = %f\n", exp, m.pop[m.bestPop][0].fitness)
 }
 
 // PrintTestData - print the testdata
@@ -616,7 +621,7 @@ func (m *Mep) eval(results [][]float64, c *chromosome) {
 				if results[c.program[i].adr1][k] > results[c.program[i].adr2][k] {
 					results[i][k] = 1.0
 				} else {
-					results[i][k] = -1.0
+					results[i][k] = 0.0
 				}
 			}
 		case -19: // ifblt
@@ -624,7 +629,7 @@ func (m *Mep) eval(results [][]float64, c *chromosome) {
 				if results[c.program[i].adr1][k] < results[c.program[i].adr2][k] {
 					results[i][k] = 1.0
 				} else {
-					results[i][k] = -1.0
+					results[i][k] = 0.0
 				}
 			}
 		case -20: // and
@@ -632,7 +637,7 @@ func (m *Mep) eval(results [][]float64, c *chromosome) {
 				if results[c.program[i].adr1][k] > 0.0 && results[c.program[i].adr2][k] > 0.0 {
 					results[i][k] = 1.0
 				} else {
-					results[i][k] = -1.0
+					results[i][k] = 0.0
 				}
 			}
 		case -21: // or
@@ -640,7 +645,7 @@ func (m *Mep) eval(results [][]float64, c *chromosome) {
 				if results[c.program[i].adr1][k] > 0.0 || results[c.program[i].adr2][k] > 0.0 {
 					results[i][k] = 1.0
 				} else {
-					results[i][k] = -1.0
+					results[i][k] = 0.0
 				}
 			}
 		case -22: // pow
@@ -835,28 +840,28 @@ func (m *Mep) parse(exp string, individual chromosome, poz int) string {
 		exp = m.parse(exp, individual, adr1)
 		exp += ">"
 		exp = m.parse(exp, individual, adr2)
-		exp += "1,-1)"
+		exp += ",1,0)"
 
 	} else if op == -19 { // ifblt
 		exp += "iif("
 		exp = m.parse(exp, individual, adr1)
 		exp += "<"
 		exp = m.parse(exp, individual, adr2)
-		exp += "1,-1)"
+		exp += ",1,0)"
 
 	} else if op == -20 { // and
 		exp += "iif("
 		exp = m.parse(exp, individual, adr1)
 		exp += ">0 &&"
 		exp = m.parse(exp, individual, adr2)
-		exp += ">0,1,-1)"
+		exp += ">0,1,0)"
 
 	} else if op == -21 { // or
 		exp += "iif("
 		exp = m.parse(exp, individual, adr1)
 		exp += ">0 ||"
 		exp = m.parse(exp, individual, adr2)
-		exp += ">0,1,-1)"
+		exp += ">0,1,0)"
 
 	} else if op == -22 { // pow
 		exp += "pow("

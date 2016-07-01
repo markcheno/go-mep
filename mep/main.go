@@ -34,8 +34,11 @@ import (
 	"flag"
 	"fmt"
 	"github.com/markcheno/go-mep"
+	"log"
 	"math"
 	"math/rand"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strconv"
 	"strings"
@@ -67,6 +70,9 @@ type mepFlags struct {
 
 func main() {
 
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 	var flags mepFlags
 
 	flag.IntVar(&flags.subPopSize, "popsize", 100, "sets sub-population size (default=100)")
